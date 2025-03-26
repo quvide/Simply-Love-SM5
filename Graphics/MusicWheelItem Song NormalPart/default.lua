@@ -4,6 +4,7 @@ local af = LoadActor("../MusicWheelItem Course NormalPart.lua")
 
 local stepstype = GAMESTATE:GetCurrentStyle():GetStepsType()
 
+-- "Has Edit" indicator sprite
 -- using a png in a Sprite ties the visual to a specific rasterized font (currently Miso),
 -- but Sprites are cheaper than BitmapTexts, so we should use them where dynamic text is not needed
 af[#af+1] = Def.Sprite{
@@ -20,6 +21,7 @@ af[#af+1] = Def.Sprite{
 }
 
 for player in ivalues(PlayerNumber) do
+	af[#af+1] = LoadActor("TechNotation.lua", player)
 	af[#af+1] = LoadActor("Favorites.lua", player)
 
 	-- Add ITL EX scores to the song wheel as well.
