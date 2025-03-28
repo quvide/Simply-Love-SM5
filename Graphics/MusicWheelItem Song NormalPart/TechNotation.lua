@@ -1,9 +1,5 @@
 -- Song wheel tech analysis
 
-if not ThemePrefs.Get("MusicWheelTechNotation") then
-	return
-end
-
 local player = ...
 local pn = ToEnumShortString(player)
 
@@ -58,7 +54,7 @@ local af = Def.BitmapText {
 		self:visible(false)
 		self:horizalign(left)
 		self:zoom(0.6)
-		self:x(_screen.w / (WideScale(2.15, 2.14)) - self:GetWidth() * self:GetZoom() - 120)
+		self:x(_screen.w / (WideScale(2.15, 2.14)) - self:GetWidth() * self:GetZoom() - 100)
 		if DarkUI() then self:diffuse(0, 0, 0, 1) end
 	end,
 	-- Set is called by MusicWheelItem::HandleMessage. There are a bunch of messages that can trigger it.
