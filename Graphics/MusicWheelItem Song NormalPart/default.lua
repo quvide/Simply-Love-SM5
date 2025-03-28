@@ -21,7 +21,7 @@ af[#af+1] = Def.Sprite{
 
 -- Player-specific actors
 for player in ivalues(PlayerNumber) do
-	if ThemePrefs.Get("MusicWheelTechNotation") then
+	if ThemePrefs.Get("MusicWheelTechNotation") ~= "No" then
 		af[#af + 1] = LoadActor("TechNotation.lua", player)
 	end
 	if ThemePrefs.Get("MusicWheelEXScore") then

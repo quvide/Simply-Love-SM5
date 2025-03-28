@@ -7,39 +7,81 @@ local pn = ToEnumShortString(player)
 local techtypes = {
 	{
 		tcc = "TechCountsCategory_Brackets",
-		symbol_light = "b",
-		symbol_medium= "B",
-		symbol_heavy = "B+"
+		Condensed = {
+			symbol_light  = "b",
+			symbol_medium = "B",
+			symbol_heavy  = "B+"
+		},
+		Verbose = {
+			symbol_light  = "BR- ",
+			symbol_medium = "BR ",
+			symbol_heavy  = "BR+ "
+		}
 	},
 	{
 		tcc = "TechCountsCategory_Crossovers",
-		symbol_light = "x",
-		symbol_medium= "X",
-		symbol_heavy = "X+"
+		Condensed = {
+			symbol_light  = "x",
+			symbol_medium = "X",
+			symbol_heavy  = "X+"
+		},
+		Verbose = {
+			symbol_light  = "XO- ",
+			symbol_medium = "XO ",
+			symbol_heavy  = "XO+ "
+		}
 	},
 	{
 		tcc = "TechCountsCategory_Footswitches",
-		symbol_light = "f",
-		symbol_medium= "F",
-		symbol_heavy = "F+"
+		Condensed = {
+			symbol_light  = "f",
+			symbol_medium = "F",
+			symbol_heavy  = "F+"
+		},
+		Verbose = {
+			symbol_light  = "FS- ",
+			symbol_medium = "FS ",
+			symbol_heavy  = "FS+ "
+		}
 	},
 	{
 		tcc = "TechCountsCategory_Sideswitches",
-		symbol_light = "s",
-		symbol_medium= "S",
-		symbol_heavy = "S+"
+		Condensed = {
+			symbol_light  = "s",
+			symbol_medium = "S",
+			symbol_heavy  = "S+"
+		},
+		Verbose = {
+			symbol_light  = "SS ",
+			symbol_medium = "SS ",
+			symbol_heavy  = "SS+ "
+		}
 	},
 	{
 		tcc = "TechCountsCategory_Jacks",
-		symbol_light = "j",
-		symbol_medium= "J",
-		symbol_heavy = "J+"
+		Condensed = {
+			symbol_light  = "j",
+			symbol_medium = "J",
+			symbol_heavy  = "J+"
+		},
+		Verbose = {
+			symbol_light  = "JS- ",
+			symbol_medium = "JS ",
+			symbol_heavy  = "JS+ "
+		}
 	},
 	{
 		tcc = "TechCountsCategory_Doublesteps",
-		symbol_light = "d",
-		symbol_medium= "D",
-		symbol_heavy = "D+"
+		Condensed = {
+			symbol_light  = "d",
+			symbol_medium = "D",
+			symbol_heavy  = "D+"
+		},
+		Verbose = {
+			symbol_light  = "DS- ",
+			symbol_medium = "DS ",
+			symbol_heavy  = "DS+ "
+		}
 	}
 }
 
@@ -52,9 +94,8 @@ local af = Def.BitmapText {
 		-- position on right side of the song title, left of ITL EX
 		-- fits the maximum 6 techs
 		self:visible(false)
-		self:horizalign(left)
+		self:horizalign(right)
 		self:zoom(0.6)
-		self:x(_screen.w / (WideScale(2.15, 2.14)) - self:GetWidth() * self:GetZoom() - 100)
 		if DarkUI() then self:diffuse(0, 0, 0, 1) end
 	end,
 	-- Set is called by MusicWheelItem::HandleMessage. There are a bunch of messages that can trigger it.
@@ -76,6 +117,13 @@ local af = Def.BitmapText {
 			-- SM("Song is nil")
 			return
 		end
+
+		-- TODO: is there a better way of laying this out?
+		local x_offset = 10
+		if IsItlSong(song, player) then
+			x_offset = 60
+		end
+		self:x(_screen.w / (WideScale(2.15, 2.14)) - x_offset)
 
 		-- steps of _this_ actor
 		local steps = SongUtil.GetPlayableSteps(song)
@@ -141,13 +189,14 @@ local af = Def.BitmapText {
 		for key, t in ipairs(techtypes) do
 			local tech_amount = tech:GetValue(t.tcc)
 			local symbol = ""
+			local t_symbols = t[ThemePrefs.Get("MusicWheelTechNotation")]
 
 			if tech_amount > heavy_threshold then
-				symbol = t.symbol_heavy
+				symbol = t_symbols.symbol_heavy
 			elseif tech_amount > normal_threshold then
-				symbol = t.symbol_medium
+				symbol = t_symbols.symbol_medium
 			elseif tech_amount > static_threshold and tech_amount > light_threshold then
-				symbol = t.symbol_light
+				symbol = t_symbols.symbol_light
 			end
 
 			found_techtypes[#found_techtypes + 1] = symbol

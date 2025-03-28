@@ -329,9 +329,13 @@ SL_CustomPrefs.Get = function()
 		},
 
 		MusicWheelTechNotation = {
-			Default = false,
-			Choices =  { THEME:GetString("ThemePrefs","Yes"), THEME:GetString("ThemePrefs", "No") },
-			Values = { true, false }
+			Default = "No",
+			Choices = {
+				THEME:GetString("ThemePrefs", "Verbose"),
+				THEME:GetString("ThemePrefs", "Condensed"),
+				THEME:GetString("ThemePrefs", "No")
+			},
+			Values = { "Verbose", "Condensed", "No" }
 		},
 
 		MusicWheelEXScore = {
