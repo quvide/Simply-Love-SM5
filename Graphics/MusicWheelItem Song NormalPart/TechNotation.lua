@@ -3,87 +3,6 @@
 local player = ...
 local pn = ToEnumShortString(player)
 
--- array style to keep ordering in ipairs
-local techtypes = {
-	{
-		tcc = "TechCountsCategory_Brackets",
-		Condensed = {
-			symbol_light  = "b",
-			symbol_medium = "B",
-			symbol_heavy  = "B+"
-		},
-		Verbose = {
-			symbol_light  = "BR- ",
-			symbol_medium = "BR ",
-			symbol_heavy  = "BR+ "
-		}
-	},
-	{
-		tcc = "TechCountsCategory_Crossovers",
-		Condensed = {
-			symbol_light  = "x",
-			symbol_medium = "X",
-			symbol_heavy  = "X+"
-		},
-		Verbose = {
-			symbol_light  = "XO- ",
-			symbol_medium = "XO ",
-			symbol_heavy  = "XO+ "
-		}
-	},
-	{
-		tcc = "TechCountsCategory_Footswitches",
-		Condensed = {
-			symbol_light  = "f",
-			symbol_medium = "F",
-			symbol_heavy  = "F+"
-		},
-		Verbose = {
-			symbol_light  = "FS- ",
-			symbol_medium = "FS ",
-			symbol_heavy  = "FS+ "
-		}
-	},
-	{
-		tcc = "TechCountsCategory_Sideswitches",
-		Condensed = {
-			symbol_light  = "s",
-			symbol_medium = "S",
-			symbol_heavy  = "S+"
-		},
-		Verbose = {
-			symbol_light  = "SS ",
-			symbol_medium = "SS ",
-			symbol_heavy  = "SS+ "
-		}
-	},
-	{
-		tcc = "TechCountsCategory_Jacks",
-		Condensed = {
-			symbol_light  = "j",
-			symbol_medium = "J",
-			symbol_heavy  = "J+"
-		},
-		Verbose = {
-			symbol_light  = "JS- ",
-			symbol_medium = "JS ",
-			symbol_heavy  = "JS+ "
-		}
-	},
-	{
-		tcc = "TechCountsCategory_Doublesteps",
-		Condensed = {
-			symbol_light  = "d",
-			symbol_medium = "D",
-			symbol_heavy  = "D+"
-		},
-		Verbose = {
-			symbol_light  = "DS- ",
-			symbol_medium = "DS ",
-			symbol_heavy  = "DS+ "
-		}
-	}
-}
 
 -- TODO: 2 actors, one for each player. Could this be one actor that draws both players?
 local af = Def.BitmapText {
@@ -139,10 +58,6 @@ local af = Def.BitmapText {
 			self:y(0)
 		end
 
-		-- Minimum occurrence of tech to be counted.
-		-- Static in sense that it doesn't depend on other chart properties, like its length / stepcount
-		local static_threshold = 2
-
 		local currentSteps = GAMESTATE:GetCurrentSteps(player)
 		if currentSteps == nil then
 			-- SM("currentSteps nil")
@@ -165,48 +80,9 @@ local af = Def.BitmapText {
 			end
 		end
 
-		if stepsToCheck == nil then
-			-- SM("No steps to check")
-			return
-		end
-
-		-- Modern tech parser output
-		local tech = stepsToCheck:GetTechCounts(pn)
-
-		-- Legacy radar values, we only currently need this for the step count. In the future could have jumps / rolls?
-		local radar = stepsToCheck:GetRadarValues(pn)
-
-		local found_techtypes = {}
-
-		-- Total steps in the difficulty
-		local stepcount = radar:GetValue("RadarCategory_Notes")
-
-		local light_threshold = 0.005 * stepcount
-		local normal_threshold = 0.02 * stepcount
-		local heavy_threshold = 0.05 * stepcount
-
-		-- The beef, convert the tech parser results into textual notation
-		for key, t in ipairs(techtypes) do
-			local tech_amount = tech:GetValue(t.tcc)
-			local symbol = ""
-			local t_symbols = t[ThemePrefs.Get("MusicWheelTechNotation")]
-
-			if tech_amount > heavy_threshold then
-				symbol = t_symbols.symbol_heavy
-			elseif tech_amount > normal_threshold then
-				symbol = t_symbols.symbol_medium
-			elseif tech_amount > static_threshold and tech_amount > light_threshold then
-				symbol = t_symbols.symbol_light
-			end
-
-			found_techtypes[#found_techtypes + 1] = symbol
-		end
-
-		local text = ""
-
-		for key, value in ipairs(found_techtypes) do
-			text = text .. value
-		end
+		--- @type string
+		local preferred_tech_style = ThemePrefs.Get("MusicWheelTechNotation")
+		local text = SLTechNotation_Format(stepsToCheck, pn, preferred_tech_style)
 
 		self:settext(text)
 		self:visible(true)
