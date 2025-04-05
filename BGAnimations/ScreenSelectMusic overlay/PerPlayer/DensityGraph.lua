@@ -227,6 +227,24 @@ af2[#af2+1] = Def.ActorFrame{
 		self:visible(showPatternInfo)
 	end,
 
+	-- Tech notation, identical placement as the Peak NPS text
+	LoadFont("Common Normal")..{
+		Text = "",
+		InitCommand=function(self)
+			self:horizalign(left):zoom(0.8):maxwidth(125)
+			if player == PLAYER_1 then
+				self:addx(60):addy(-41)
+			else
+				self:addx(-136):addy(-41)
+			end
+			-- We want black text in Rainbow mode except during HolidayCheer(), white otherwise.
+			self:diffuse((ThemePrefs.Get("RainbowMode") and not HolidayCheer()) and {0, 0, 0, 1} or {1, 1, 1, 1})
+		end,
+		RedrawCommand=function(self)
+			self:settext(SL[pn].Streams.TechNotation)
+		end
+	},
+
 	-- Background for the additional chart info.
 	-- Only shown in 1 Player mode
 	Def.Quad{
@@ -247,52 +265,29 @@ local layout = {
 	{"Brackets", "Doublesteps"},
 }
 
--- colored background quad
-af3[#af3+1] = Def.Quad{
-	Name="BackgroundQuad",
-	InitCommand=function(self) self:zoomto(175, _screen.h/28):x(-175/2):y(-_screen.h/28/2):diffuse(color("#000000")) end,
-	RedrawCommand=function(self)
-		local StepsOrTrail = GAMESTATE:IsCourseMode() and GAMESTATE:GetCurrentTrail(player) or GAMESTATE:GetCurrentSteps(player)
+local noneText = THEME:GetString("SLPlayerOptions", "None")
+local totalStreamText = THEME:GetString("SLPlayerOptions", "TotalStream")
 
-		if StepsOrTrail then
-			local difficulty = StepsOrTrail:GetDifficulty()
-			self:diffuse( DifficultyColor(difficulty) )
+-- Total Stream %
+local a = LoadFont("Common Normal") .. {
+	InitCommand = function(self)
+		self:maxwidth(100)
+	end,
+
+	HideCommand = function(self)
+		self:settext(noneText.." (0.0%)")
+	end,
+
+	RedrawCommand = function(self)
+		local streamMeasures, breakMeasures = GetTotalStreamAndBreakMeasures(pn)
+		local totalMeasures = streamMeasures + breakMeasures
+		if streamMeasures == 0 then
+			self:settext(noneText.." (0.0%)")
 		else
-			self:diffuse( PlayerColor(player) )
+			self:settext(string.format("%d/%d (%0.1f%%)", streamMeasures, totalMeasures, streamMeasures/totalMeasures*100))
 		end
 	end
 }
-
--- Tech label
-af3[#af3+1] = LoadFont("Common Normal")..{
-	Text = "TECH   ",
-	InitCommand=function(self)
-		self:diffuse(0,0,0,1):horizalign(left):zoom(0.8):maxwidth(138)
-	end,
-	RedrawCommand=function(self, params)
-		self:settext("TECH   " .. SL[pn].Streams.TechNotation)
-	end
-}
-
--- Extracted from
--- local noneText = THEME:GetString("SLPlayerOptions", "None")
--- local totalStreamText = THEME:GetString("SLPlayerOptions", "TotalStream")
--- InitCommand
---	if col == "Total Stream" then
---		self:maxwidth(100)
---	end
--- HideCommand
--- self:settext(noneText.." (0.0%)")
--- 
--- RedrawCommand
---	local streamMeasures, breakMeasures = GetTotalStreamAndBreakMeasures(pn)
---	local totalMeasures = streamMeasures + breakMeasures
---	if streamMeasures == 0 then
---		self:settext(noneText.." (0.0%)")
---	else
---		self:settext(string.format("%d/%d (%0.1f%%)", streamMeasures, totalMeasures, streamMeasures/totalMeasures*100))
---	end
-
 
 local colSpacing = 150
 local rowSpacing = 20
