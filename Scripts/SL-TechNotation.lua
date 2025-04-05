@@ -63,9 +63,9 @@ local tech_categories = {
 			symbol_heavy  = "J+"
 		},
 		[TechNotationVerboseKey] = {
-			symbol_light  = "JS- ",
-			symbol_medium = "JS ",
-			symbol_heavy  = "JS+ "
+			symbol_light  = "JA- ",
+			symbol_medium = "JA ",
+			symbol_heavy  = "JA+ "
 		}
 	},
 	{

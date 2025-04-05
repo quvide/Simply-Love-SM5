@@ -428,6 +428,8 @@ local MaybeCopyFromOppositePlayer = function(pn, filename, stepsType, difficulty
 		SL[pn].Streams.Sideswitches = SL[opposite_player].Streams.Sideswitches
 		SL[pn].Streams.Jacks = SL[opposite_player].Streams.Jacks
 		SL[pn].Streams.Brackets = SL[opposite_player].Streams.Brackets
+		SL[pn].Streams.Doublesteps = SL[opposite_player].Streams.Doublesteps
+		SL[pn].Streams.TechNotation = SL[opposite_player].Streams.TechNotation
 
 		SL[pn].Streams.Filename = SL[opposite_player].Streams.Filename
 		SL[pn].Streams.StepsType = SL[opposite_player].Streams.StepsType
@@ -504,6 +506,9 @@ ParseChartInfo = function(steps, pn)
 				SL[pn].Streams.Sideswitches = techCounts:GetValue("TechCountsCategory_Sideswitches")
 				SL[pn].Streams.Jacks = techCounts:GetValue("TechCountsCategory_Jacks")
 				SL[pn].Streams.Brackets = techCounts:GetValue("TechCountsCategory_Brackets")
+				SL[pn].Streams.Doublesteps = techCounts:GetValue("TechCountsCategory_Doublesteps")
+
+				SL[pn].Streams.TechNotation = SLTechNotation_Format(steps, pn, TechNotationVerboseKey)
 
 				SL[pn].Streams.Filename = filename
 				SL[pn].Streams.StepsType = stepsType
@@ -527,6 +532,7 @@ ParseChartInfo = function(steps, pn)
 			SL[pn].Streams.Sideswitches = 0
 			SL[pn].Streams.Jacks = 0
 			SL[pn].Streams.Brackets = 0
+			SL[pn].Streams.Doublesteps = 0
 
 			SL[pn].Streams.Filename = filename
 			SL[pn].Streams.StepsType = stepsType
