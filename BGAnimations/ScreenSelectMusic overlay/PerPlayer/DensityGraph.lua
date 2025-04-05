@@ -244,49 +244,77 @@ local af3 = af2[#af2]
 local layout = {
 	{"Crossovers", "Footswitches"},
 	{"Sideswitches", "Jacks"},
-	{"Brackets", "Total Stream"},
+	{"Brackets", "Doublesteps"},
 }
+
+-- colored background quad
+af3[#af3+1] = Def.Quad{
+	Name="BackgroundQuad",
+	InitCommand=function(self) self:zoomto(175, _screen.h/28):x(-175/2):y(-_screen.h/28/2):diffuse(color("#000000")) end,
+	RedrawCommand=function(self)
+		local StepsOrTrail = GAMESTATE:IsCourseMode() and GAMESTATE:GetCurrentTrail(player) or GAMESTATE:GetCurrentSteps(player)
+
+		if StepsOrTrail then
+			local difficulty = StepsOrTrail:GetDifficulty()
+			self:diffuse( DifficultyColor(difficulty) )
+		else
+			self:diffuse( PlayerColor(player) )
+		end
+	end
+}
+
+-- Tech label
+af3[#af3+1] = LoadFont("Common Normal")..{
+	Text = "TECH   ",
+	InitCommand=function(self)
+		self:diffuse(0,0,0,1):horizalign(left):zoom(0.8):maxwidth(138)
+	end,
+	RedrawCommand=function(self, params)
+		self:settext("TECH   " .. SL[pn].Streams.TechNotation)
+	end
+}
+
+-- Extracted from
+-- local noneText = THEME:GetString("SLPlayerOptions", "None")
+-- local totalStreamText = THEME:GetString("SLPlayerOptions", "TotalStream")
+-- InitCommand
+--	if col == "Total Stream" then
+--		self:maxwidth(100)
+--	end
+-- HideCommand
+-- self:settext(noneText.." (0.0%)")
+-- 
+-- RedrawCommand
+--	local streamMeasures, breakMeasures = GetTotalStreamAndBreakMeasures(pn)
+--	local totalMeasures = streamMeasures + breakMeasures
+--	if streamMeasures == 0 then
+--		self:settext(noneText.." (0.0%)")
+--	else
+--		self:settext(string.format("%d/%d (%0.1f%%)", streamMeasures, totalMeasures, streamMeasures/totalMeasures*100))
+--	end
+
 
 local colSpacing = 150
 local rowSpacing = 20
-local noneText = THEME:GetString("SLPlayerOptions", "None")
-local totalStreamText = THEME:GetString("SLPlayerOptions", "TotalStream")
 
 for i, row in ipairs(layout) do
 	for j, col in pairs(row) do
 		af3[#af3+1] = LoadFont("Common normal")..{
-			Text=(col ~= totalStreamText and "0" or noneText).." (0.0%)",
+			Text="0",
 			Name=col .. "Value",
 			InitCommand=function(self)
-				local textHeight = 17
+				local textHeight = 17 -- TODO: remove? This is unused
 				local textZoom = 0.8
 				self:zoom(textZoom):horizalign(right)
-				if col == "Total Stream" then
-					self:maxwidth(100)
-				end
 				self:xy(-width/2 + 40, -height/2 + 13)
 				self:addx((j-1)*colSpacing)
 				self:addy((i-1)*rowSpacing)
 			end,
 			HideCommand=function(self)
-				if col ~= "Total Stream" then
-					self:settext("0")
-				else
-					self:settext(noneText.." (0.0%)")
-				end
+				self:settext("0")
 			end,
 			RedrawCommand=function(self)
-				if col ~= "Total Stream" then
-					self:settext(SL[pn].Streams[col])
-				else
-					local streamMeasures, breakMeasures = GetTotalStreamAndBreakMeasures(pn)
-					local totalMeasures = streamMeasures + breakMeasures
-					if streamMeasures == 0 then
-						self:settext(noneText.." (0.0%)")
-					else
-						self:settext(string.format("%d/%d (%0.1f%%)", streamMeasures, totalMeasures, streamMeasures/totalMeasures*100))
-					end
-				end
+				self:settext(SL[pn].Streams[col])
 			end
 		}
 
@@ -294,7 +322,7 @@ for i, row in ipairs(layout) do
 			Text=THEME:GetString("TechCategory", col),
 			Name=col,
 			InitCommand=function(self)
-				local textHeight = 17
+				local textHeight = 17 -- TODO: remove? This is unused
 				local textZoom = 0.8
 				self:maxwidth(width/textZoom):zoom(textZoom):horizalign(left)
 				self:xy(-width/2 + 50, -height/2 + 13)
