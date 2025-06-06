@@ -595,7 +595,7 @@ t[#t+1] = Def.ActorFrame {
 				self:finishtweening()
 			end
 			self:playcommand( "Off", params )
-		end
+		end	
 	end,
 	HideSystemMessageMessageCommand=function(self) self:finishtweening() end,
 
