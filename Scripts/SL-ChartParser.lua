@@ -1,4 +1,4 @@
-local GetSimfileString = function(steps)
+GetSimfileString = function(steps)
 	-- steps:GetFilename() returns the filename of the sm or ssc file, including path, as it is stored in SM's cache
 	local filename = steps:GetFilename()
 	if not filename or filename == "" then return end
@@ -157,7 +157,7 @@ end
 --    NoteDataString, a substring from SimfileString that contains the just the requested (minimized) note data
 --    BPMs, a substring from SimfileString that contains the BPM string for this specific chart
 
-local GetSimfileChartString = function(SimfileString, StepsType, Difficulty, StepsDescription, Filetype)
+GetSimfileChartString = function(SimfileString, StepsType, Difficulty, StepsDescription, Filetype)
 	local NoteDataString = nil
 	local BPMs = nil
 
@@ -300,7 +300,7 @@ local GetMeasureInfo = function(Steps, chartString)
 	local timingData = Steps:GetTimingData()
 
 	-- Column Cues variables.
-	local columnCueAllData = {} 
+	local columnCueAllData = {}
 	local columnTimes = {}
 
 	-- Loop through each line in our string of measures, trimming potential leading whitespace (thanks, TLOES/Mirage Garden)
@@ -441,9 +441,9 @@ local MaybeCopyFromOppositePlayer = function(pn, filename, stepsType, difficulty
 		return false
 	end
 end
-		
+
 ParseChartInfo = function(steps, pn)
-	-- The filename for these steps in the StepMania cache 
+	-- The filename for these steps in the StepMania cache
 	local filename = steps:GetFilename()
 	-- StepsType, a string like "dance-single" or "pump-double"
 	local stepsType = ToEnumShortString( steps:GetStepsType() ):gsub("_", "-"):lower()
