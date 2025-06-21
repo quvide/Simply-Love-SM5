@@ -67,7 +67,7 @@ local GetScoresRequestProcessor = function(res, params)
 	-- have to update anything. We don't have to worry about courses here since
 	-- we don't run the RequestResponseActor in CourseMode.
 	if GAMESTATE:GetCurrentSong() == nil then return end
-	
+
 	local data = res.statusCode == 200 and JsonDecode(res.body) or nil
 	local requestCacheKey = params.requestCacheKey
 	-- If we have data, and the requestCacheKey is not in the cache, cache it.
@@ -123,19 +123,24 @@ local GetScoresRequestProcessor = function(res, params)
 					end
 
 					if gsEntry["isSelf"] then
+						local player = PlayerNumber[i]
 						-- Always display personal EX score from the site if it's available.
 						-- TODO(teejusb): Grab white count from stats and calculate it to compare local score.
 						if showExScore then
+							local ex_str = string.format("%.2f", gsEntry["score"]/100)
 							SetNameAndScore(
 								GetMachineTag(gsEntry),
-								string.format("%.2f%%", gsEntry["score"]/100),
+								ex_str .. "%",
 								playerName,
 								playerScore
 							)
+							local chartHash = data[playerStr]["chartHash"]
+							CacheSetGSEX(chartHash, PROFILEMAN:GetPlayerName(player), ex_str)
+							-- GAMESTATE:GetCurrentSong() should hopefully be correct as the hash has been verified above.
+							MESSAGEMAN:Broadcast("CacheUpdatedGSEX", { Song = GAMESTATE:GetCurrentSong() })
 							personalRecordSet = true
 						else
 							-- Let's check if the GS high score is higher than the local high score
-							local player = PlayerNumber[i]
 							local localScore = GetScoreForPlayer(player)
 							-- GS's score entry is a value like 9823, so we need to divide it by 100 to get 98.23
 							local gsScore = gsEntry["score"] / 100
