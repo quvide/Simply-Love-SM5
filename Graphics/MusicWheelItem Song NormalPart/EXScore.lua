@@ -165,7 +165,12 @@ return Def.BitmapText {
     InitCommand = function(self)
         self:visible(false)
         self:zoom(0.2)
-        self:x(32)
+        if ThemePrefs.Get("MusicWheelScore") == MusicWheelScore_ReplaceGrade then
+            self:x(32)
+        else
+            -- Identical to ITL_EXScore.lua
+            self:x(_screen.w / WideScale(2.15, 2.14) - self:GetWidth() * self:GetZoom() - 40)
+        end
         UpdateYPosition(self)
     end,
 

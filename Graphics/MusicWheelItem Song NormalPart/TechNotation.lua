@@ -39,7 +39,8 @@ local af = Def.BitmapText {
 
 		-- TODO: is there a better way of laying this out?
 		local x_offset = 10
-		if IsItlSong(song, player) then
+		if IsItlSong(song, player) or ThemePrefs.Get("MusicWheelScore") == MusicWheelScore_Yes then
+			-- We have ITL_EXscore or the inline Score on the rightmost side
 			x_offset = 60
 		end
 		self:x(_screen.w / (WideScale(2.15, 2.14)) - x_offset)
