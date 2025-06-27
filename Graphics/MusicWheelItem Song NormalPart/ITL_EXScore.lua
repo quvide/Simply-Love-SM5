@@ -9,7 +9,7 @@ return Def.BitmapText{
         self:visible(false)
         self:zoom(0.2)
         self:x(32)
-        self:x(_screen.w/(WideScale(2.15, 2.14)) - self:GetWidth()*self:GetZoom() - 40)
+        self:x(_screen.w/(WideScale(2.15, 2.14)) - self:GetWidth()*self:GetZoom() - 35)
         self:diffuse(SL.JudgmentColors["FA+"][1])
     end,
     PlayerJoinedMessageCommand=function(self)

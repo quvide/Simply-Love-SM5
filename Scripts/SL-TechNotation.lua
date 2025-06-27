@@ -50,7 +50,7 @@ local tech_categories = {
 			symbol_heavy  = "S+"
 		},
 		[TechNotationVerboseKey] = {
-			symbol_light  = "SS ",
+			symbol_light  = "SS- ",
 			symbol_medium = "SS ",
 			symbol_heavy  = "SS+ "
 		}

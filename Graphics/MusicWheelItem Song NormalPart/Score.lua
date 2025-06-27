@@ -168,8 +168,8 @@ return Def.BitmapText {
         if ThemePrefs.Get("MusicWheelScore") == MusicWheelScore_ReplaceGrade then
             self:x(32)
         else
-            -- Identical to ITL_EXScore.lua
-            self:x(_screen.w / WideScale(2.15, 2.14) - self:GetWidth() * self:GetZoom() - 40)
+            -- Similar to ITL_EXScore.lua
+            self:x(_screen.w / WideScale(2.15, 2.14) - self:GetWidth() * self:GetZoom() - 35)
         end
         UpdateYPosition(self)
     end,
