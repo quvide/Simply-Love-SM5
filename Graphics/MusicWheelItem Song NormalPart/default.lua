@@ -28,7 +28,7 @@ for player in ivalues(PlayerNumber) do
 	af[#af + 1] = LoadActor("Favorites.lua", player)
 
 	if ThemePrefs.Get("MusicWheelScore") ~= MusicWheelScore_No then
-		af[#af + 1] = LoadActor("EXScore.lua", player)
+		af[#af + 1] = LoadActor("Score.lua", player)
 	else
 		af[#af + 1] = LoadActor("ITL_EXScore.lua", player)
 	end
