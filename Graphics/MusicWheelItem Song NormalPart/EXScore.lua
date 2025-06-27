@@ -49,7 +49,7 @@ local AwardMap = {
 }
 
 -- Based on GetLamp
-local function EXColorForHighScore(score)
+local function AwardMapIndexColorForHighScore(score)
 	local award = score:GetStageAward()
     local grade = score:GetGrade()
 
@@ -68,57 +68,75 @@ local function EXColorForHighScore(score)
         award = "normal"
     end
 
-    local aw_res = AwardMap[award]
-	return SL.JudgmentColors["FA+"][aw_res]
+    local award_table_index = AwardMap[award]
+    return award_table_index
 end
 
-local function SetGetGSCachedEX(steps)
-    -- Adapted from SL-ChartParser.lua
-    -- StepsType, a string like "dance-single" or "pump-double"
-    local stepsType = ToEnumShortString( steps:GetStepsType() ):gsub("_", "-"):lower()
-    -- Difficulty, a string like "Beginner" or "Challenge"
-    local difficulty = ToEnumShortString( steps:GetDifficulty() )
-    -- An arbitary but unique string provided by the stepartist, needed here to identify Edit charts
-    local description = steps:GetDescription()
+local function SetGetGSCachedScore(steps, ex)
+    local chart_gs_hash = steps:GetGrooveStatsHash()
+    local player_name = PROFILEMAN:GetPlayerName(player)
 
-    local filepath = steps:GetFilename()
-
-    local charthash = CacheGetChartHash(filepath, difficulty, description)
-    if charthash == nil then
-        local simfileString, fileType = GetSimfileString(steps)
-        local chartString, BPMs = GetSimfileChartString(simfileString, stepsType, difficulty, description, fileType)
-        charthash = BinaryToHex(CRYPTMAN:SHA1String(chartString..BPMs)):sub(1, 16)
-        CacheSetChartHash(filepath, difficulty, description, charthash)
+    local cached_score = nil
+    if ex then
+        cached_score = CacheGetGSEX(chart_gs_hash, player_name)
+    else
+        cached_score = CacheGetGSITG(chart_gs_hash, player_name)
     end
 
-    local playerName = PROFILEMAN:GetPlayerName(player)
-    local cachedEX = CacheGetGSEX(charthash, playerName)
-
-    if cachedEX ~= nil then
-        return cachedEX
+    if cached_score ~= nil then
+        return cached_score
     end
 
     return nil
 end
 
-local function GetLocalBestEX(song, steps)
+local function GetSetLocalCachedScore(song, steps, ex)
     local pn = ToEnumShortString(player)
+    local chart_gs_hash = steps:GetGrooveStatsHash()
+    local current_song = GAMESTATE:GetCurrentSong()
+
+    local player_name = PROFILEMAN:GetPlayerName(player)
     local highscores = PROFILEMAN:GetProfile(pn):GetHighScoreList(song, steps):GetHighScores()
 
-    local best_ex = nil
-    local hs_for_best_ex = nil
-    for hs in ivalues(highscores) do
-        local ex = CalculateExScoreFromHighscoreAndSteps(hs, steps, pn)
-        if ex ~= nil and best_ex == nil then
-            best_ex = ex
-            hs_for_best_ex = hs
-        elseif ex ~= nil and ex > best_ex then
-            best_ex = ex
-            hs_for_best_ex = hs
+    if ex then
+        local cached_ex, cached_award_map_idx = CacheGetLocalEX(chart_gs_hash, player_name)
+
+        local best_ex = nil
+        local best_ex_award_map_idx = nil
+
+        if cached_ex == nil or song == current_song then
+            -- Calculate from all local scores
+            local hs_for_best_ex = nil
+            for hs in ivalues(highscores) do
+                local ex = CalculateExScoreFromHighscoreAndSteps(hs, steps, pn)
+                if ex ~= nil and best_ex == nil then
+                    best_ex = ex
+                    hs_for_best_ex = hs
+                elseif ex ~= nil and ex > best_ex then
+                    best_ex = ex
+                    hs_for_best_ex = hs
+                end
+            end
+
+            if best_ex ~= nil then
+                best_ex_award_map_idx = AwardMapIndexColorForHighScore(hs_for_best_ex)
+                CacheSetLocalEX(chart_gs_hash, player_name, best_ex, best_ex_award_map_idx)
+            end
+        else
+            best_ex = cached_ex
+            best_ex_award_map_idx = cached_award_map_idx
+        end
+
+        local best_ex_color = SL.JudgmentColors["FA+"][best_ex_award_map_idx]
+
+        return best_ex, best_ex_color
+    else
+        if #highscores > 0 then
+            return highscores[1]:GetPercentDP() * 100, SL.JudgmentColors["FA+"][2]
+        else
+            return nil, nil
         end
     end
-
-    return best_ex, hs_for_best_ex
 end
 
 local function UpdateYPosition(actor)
@@ -134,6 +152,7 @@ local function UpdateYPosition(actor)
 end
 
 local function EXScore_DBG(message)
+    -- uncomment this line to enable debug logs
     -- lua.Info(message)
 end
 
@@ -172,43 +191,46 @@ return Def.BitmapText {
             return
         end
 
-        local song = nil
-
-        -- If there's a params.Song, we are being called by the engine.
-        -- In this case we want to check if this actor is already displaying the
-        -- score for this song.
-        if params ~= nil and params.Song ~= nil then
-            song = params.Song
-            if self.Song == song then
-                -- Song hasn't changed, don't need to update anything!
-                EXScore_DBG("Early return due to song being the same as previously")
-                return
-            end
-        -- self.Song is set, so we must have already displayed a score for this song.
-        -- There's a possibility that we're running SetCommand due to
-        -- CacheUpdatedGSEXMessageCommand running us.
-        elseif self.Song ~=nil then
-            song = self.Song
-        -- This branch is ran when
-        -- 1. The engine runs us with a nil params.Song
-        -- 2. CacheUpdatedGSEX runs us but SetCommand has not yet ran completely.
-        else
-            EXScore_DBG("Early return due to nil song. ")
-            return
-        end
-
-        if song ~= nil then EXScore_DBG("SetCommand song is " .. song:GetMainTitle()) end
-
-        -- If we have reached this point, we have a song.
-        -- If there is an early return past this point,
-        -- something was invalid and we don't want to display anything.
-        self:visible(false):settext("")
-
         local currentSteps = GAMESTATE:GetCurrentSteps(player)
         if currentSteps == nil then
             EXScore_DBG("Early return due to nil currentSteps")
             return
         end
+        local currentDifficulty = currentSteps:GetDifficulty()
+
+        local song = nil
+
+        -- If there's a params.Song, we are being called by the engine.
+        -- In this case we want to check if this actor is already displaying the
+        -- score for this song. If the the difficulty has changed, the steps
+        -- are probably different too. Don't want to move the step selection logic
+        -- so high up as it's more complicated.
+        if params ~= nil and params.Song ~= nil then
+            song = params.Song
+            if self.Song == song and self.Difficulty == currentDifficulty then
+                -- Song and difficulty hasn't changed, don't need to update anything!
+                EXScore_DBG("Early return due to song being the same as previously")
+                return
+            end
+        -- If we're running due to the groovestats cache being updated (CacheUpdatedGSMessageCommand)
+        -- self.Song must also be set on an earlier round, otherwise the first valid run of this command
+        -- will get the latest cached value anyways.
+        elseif params.CacheUpdatedGS ~=nil and self.Song ~=nil then
+            song = self.Song
+        -- This branch is ran when
+        -- 1. The engine runs us with a nil params.Song
+        -- 2. CacheUpdatedGS runs us but SetCommand has not yet ran completely.
+        else
+            EXScore_DBG("Early return due to nil song.")
+            return
+        end
+
+        if song ~= nil then EXScore_DBG("SetCommand song is " .. song:GetSongDir()) end
+
+        -- If we have reached this point, we have a song.
+        -- If there is an early return past this point,
+        -- something was invalid and we don't want to display anything.
+        self:visible(false):settext("")
 
         local allSteps = SongUtil.GetPlayableSteps(song)
         -- Show value that matches the currently selected difficulty.
@@ -221,7 +243,7 @@ return Def.BitmapText {
             -- TODO: Match the engine (or theme?) behaviour on which difficulty will be autoselected from this chart
             -- if there's no exact match.
             for k, v in ipairs(allSteps) do
-                if v:GetDifficulty() == currentSteps:GetDifficulty() then
+                if v:GetDifficulty() == currentDifficulty then
                     steps = v
                 end
             end
@@ -234,36 +256,54 @@ return Def.BitmapText {
 
         EXScore_DBG("Actually calculating something for " .. song:GetMainTitle())
 
-        -- Local scores
-        local best_ex, hs_for_best_ex = GetLocalBestEX(song, steps)
+        local showExScore = SL[ToEnumShortString(player)].ActiveModifiers.ShowExScore
 
-        -- GrooveStats cache
-        local groovestats_ex = nil
-        if ThemePrefs.Get("EnableGrooveStats") then
-            groovestats_ex = SetGetGSCachedEX(steps)
+        -- Local score. GetSetLocalCached... will recalculate if this song is the currently selected song.
+        local local_score = nil
+        local local_score_color = nil
+
+        -- GrooveStats score. GetSetGSCached... will not call the API, that's done by PaneDisplay.
+        -- PaneDisplay broadcasts CacheUpdatedGS when it writes something to the cache.
+        local groovestats_score = nil
+
+        if showExScore then
+            local_score, local_score_color = GetSetLocalCachedScore(song, steps, true)
+            if ThemePrefs.Get("EnableGrooveStats") then
+                groovestats_score = SetGetGSCachedScore(steps, true)
+            end
+        else
+            local_score, local_score_color = GetSetLocalCachedScore(song, steps, false)
+            if ThemePrefs.Get("EnableGrooveStats") then
+                groovestats_score = SetGetGSCachedScore(steps, false)
+            end
         end
 
         -- Display the best score
-        if best_ex ~= nil and best_ex >= tonumber(groovestats_ex or "0") then
-            self:settext(("%05.2f"):format(best_ex))
-            self:diffuse(EXColorForHighScore(hs_for_best_ex))
+        if local_score ~= nil and local_score >= tonumber(groovestats_score or "0") then
+            self:settext(("%05.2f"):format(local_score))
+            self:diffuse(local_score_color)
             self:visible(true)
-        elseif groovestats_ex ~= nil and tonumber(groovestats_ex) > (best_ex or 0) then
-            self:settext(groovestats_ex)
+        elseif groovestats_score ~= nil and tonumber(groovestats_score) > (local_score or 0) then
+            self:settext(groovestats_score)
+            -- We don't get timing counts from GS so we don't know what lamp color this would be.
+            -- If we also have the score locally (technically it might not be the same score as
+            -- multiple scores could have the same EX), it's shown by the earlier if branch.
             self:diffuse(color("#ffffff"))
             self:visible(true)
         end
 
-        -- Flag that we are already displaying an accurate result for the song
+        -- Flag that we are already displaying an accurate result for the song & difficulty pair
         self.Song = song
+        self.Difficulty = currentDifficulty
     end,
 
-    CacheUpdatedGSEXMessageCommand = function(self, params)
-        EXScore_DBG("Got CacheUpdatedGSEX " .. tostring(params.Song))
+    CacheUpdatedGSMessageCommand = function(self, params)
+        EXScore_DBG("Got CacheUpdatedGS " .. tostring(params.Song))
+        -- Optimization: only refresh the song that was updated.
         if params.Song == self.Song then
-            self:playcommand("Set"--[[, { CacheUpdatedGSEX_Song = params.Song }]])
+            self:playcommand("Set", { CacheUpdatedGS = true })
         else
-            EXScore_DBG("CacheUpdatedGSEX not calling Set due to self.Song not matching")
+            EXScore_DBG("CacheUpdatedGS not calling Set due to self.Song not matching")
         end
     end
 }
