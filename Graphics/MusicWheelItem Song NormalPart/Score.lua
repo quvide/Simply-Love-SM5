@@ -24,26 +24,8 @@ local function CalculateExScoreFromHighscoreAndSteps(hs, steps, pn)
 end
 
 local function MusicRateFromHighscore(hs)
-    local music_rate_suffix = "xMusic" -- essentially ssprintf("%2.2fxMusic"), see SongOptions::GetMods
-    local mods_string = hs:GetModifiers() -- can be something like "NoHideLights, m250, Overhead, 0.99xMusic"
-    local suffix_pos = string.find(mods_string, music_rate_suffix)
-    if suffix_pos == nil or suffix_pos == 0 then
-        return 1
-    else
-        local iteration_pos = suffix_pos - 1
-        while iteration_pos >= 0 do
-            local char_at_iteration_pos = string.sub(mods_string, iteration_pos, iteration_pos)
-            if char_at_iteration_pos == " " or char_at_iteration_pos == "," then
-                local number = tonumber(string.sub(mods_string, iteration_pos, suffix_pos - 1))
-                if number > 0 then
-                    return number
-                end
-            end
-            
-            iteration_pos = iteration_pos - 1
-        end
-    end
-    
+    local rate = string.match(hs:GetModifiers(), "([%d%.]+)xMusic")
+    return tonumber(rate) or 1
 end
 
 -- Based on GetLamp
@@ -92,6 +74,11 @@ local function AwardMapIndexColorForHighScore(score)
     end
 
     local award_table_index = AwardMap[award]
+    if award_table_index == nil then
+        -- there are some other weird GetStageAward values for scores with a lot of greats, ignore them
+        award_table_index = AwardMap["normal"]
+    end
+
     return award_table_index
 end
 
@@ -184,7 +171,7 @@ local function GetSetLocalCachedScore(song, steps, ex)
     end
 end
 
-local function UpdateYPosition(actor)
+local function UpdatePosition(actor)
     local p1setting = PlayerMusicWheelScore(PLAYER_1)
     local p2setting = PlayerMusicWheelScore(PLAYER_2)
     if GAMESTATE:GetNumSidesJoined() == 2 and p1setting == p2setting and (p1setting == PlayerMusicWheelScore_ReplaceGrade or p1setting == PlayerMusicWheelScore_Yes) then
@@ -195,6 +182,24 @@ local function UpdateYPosition(actor)
         end
     else
         actor:y(-4)
+    end
+    
+    if PlayerMusicWheelScore(player) == PlayerMusicWheelScore_ReplaceGrade then
+        if GAMESTATE:GetNumSidesJoined() == 2 and player == PLAYER_1 and PlayerMusicWheelScore(PLAYER_2) ~= PlayerMusicWheelScore_ReplaceGrade then
+            -- 2 players, we're P1 and P2 has grade
+            actor:x(20)
+            actor:maxwidth(160)
+        elseif GAMESTATE:GetNumSidesJoined() == 2 and player == PLAYER_2 and PlayerMusicWheelScore(PLAYER_1) ~= PlayerMusicWheelScore_ReplaceGrade then
+            -- 2 players, we're P2 and P1 has grade
+            actor:x(50)
+            actor:maxwidth(0)
+        else
+            actor:x(32)
+            actor:maxwidth(0)
+        end
+    else
+        -- Similar to ITL_EXScore.lua
+        actor:x(_screen.w / WideScale(2.15, 2.14) - 35)
     end
 end
 
@@ -212,37 +217,37 @@ return Def.BitmapText {
     InitCommand = function(self)
         self:visible(false)
         self:zoom(0.2)
-        if PlayerMusicWheelScore(player) == PlayerMusicWheelScore_ReplaceGrade then
-            if GAMESTATE:GetNumSidesJoined() == 2 and player == PLAYER_1 and PlayerMusicWheelScore(PLAYER_2) ~= PlayerMusicWheelScore_ReplaceGrade then
-                self:x(20)
-                self:maxwidth(160)
-            elseif GAMESTATE:GetNumSidesJoined() == 2 and player == PLAYER_2 and PlayerMusicWheelScore(PLAYER_1) ~= PlayerMusicWheelScore_ReplaceGrade then
-                self:x(50)
-            else
-                self:x(32)
-            end
-        else
-            -- Similar to ITL_EXScore.lua
-            self:x(_screen.w / WideScale(2.15, 2.14) - self:GetWidth() * self:GetZoom() - 35)
+        UpdatePosition(self)
+    end,
+
+    PlayerJoinedMessageCommand = function(self) self:queuecommand("Refresh") end,
+    PlayerUnjoinedMessageCommand = function(self) self:queuecommand("Refresh") end,
+    PlayerProfileSetMessageCommand = function(self) self:queuecommand("Refresh") end,
+
+    RefreshCommand = function(self)
+        self.Song = nil
+        self:visible(false)
+        if self.LatestSetSong then
+            self:playcommand("Set", { Song = self.LatestSetSong })
         end
-        UpdateYPosition(self)
-    end,
-
-    PlayerJoinedMessageCommand = function(self)
-        self:visible(GAMESTATE:IsPlayerEnabled(player))
-        UpdateYPosition(self)
-    end,
-
-    PlayerUnjoinedMessageCommand = function(self)
-        self:visible(GAMESTATE:IsPlayerEnabled(player))
-        UpdateYPosition(self)
     end,
 
     SetCommand = function(self, params)
         EXScore_DBG("Running SetCommand")
 
+        -- stored for RefreshCommand
+        if params and params.Song then
+            self.LatestSetSong = params.Song
+        end
+
         -- Goal here is to utilize different levels of caches to do as little
         -- processing as possible to keep the UI snappy.
+
+        -- Only display score if enabled in settings
+        if PlayerMusicWheelScore(player) == PlayerMusicWheelScore_No then
+            self:visible(false)
+            return
+        end
 
         -- Only display EX score if a profile is found for an enabled player.
         if not GAMESTATE:IsPlayerEnabled(player) or not PROFILEMAN:IsPersistentProfile(player) then
@@ -250,12 +255,20 @@ return Def.BitmapText {
             return
         end
 
+        UpdatePosition(self)
+
+        local currentDifficulty, currentStepsType
         local currentSteps = GAMESTATE:GetCurrentSteps(player)
         if currentSteps == nil then
-            EXScore_DBG("Early return due to nil currentSteps")
-            return
+            -- We're probably on a group header. Match grade behaviour.
+            currentDifficulty = GAMESTATE:GetPreferredDifficulty(player)
+            currentStepsType = GAMESTATE:GetCurrentStyle():GetStepsType()
+        else
+            currentDifficulty = currentSteps:GetDifficulty()
+            currentStepsType = currentSteps:GetStepsType()
         end
-        local currentDifficulty = currentSteps:GetDifficulty()
+        
+        local currentSong = GAMESTATE:GetCurrentSong()
 
         local song = nil
 
@@ -267,14 +280,17 @@ return Def.BitmapText {
         if params ~= nil and params.Song ~= nil then
             song = params.Song
             if self.Song == song and self.Difficulty == currentDifficulty then
-                -- Song and difficulty hasn't changed, don't need to update anything!
-                EXScore_DBG("Early return due to song being the same as previously")
-                return
+                -- Song could have multiple steps with the same Difficulty
+                if song ~= currentSong or self.Steps == currentSteps then
+                    -- Song and difficulty hasn't changed, don't need to update anything!
+                    EXScore_DBG("Early return due to song being the same as previously")
+                    return
+                end
             end
         -- If we're running due to the groovestats cache being updated (CacheUpdatedGSMessageCommand)
         -- self.Song must also be set on an earlier round, otherwise the first valid run of this command
         -- will get the latest cached value anyways.
-        elseif params.CacheUpdatedGS ~=nil and self.Song ~=nil then
+        elseif params ~= nil and params.CacheUpdatedGS ~=nil and self.Song ~=nil then
             song = self.Song
         -- This branch is ran when
         -- 1. The engine runs us with a nil params.Song
@@ -290,20 +306,28 @@ return Def.BitmapText {
         -- If there is an early return past this point,
         -- something was invalid and we don't want to display anything.
         self:visible(false):settext("")
+        self.Song = nil
+        self.Difficulty = nil
+        self.Steps = nil
 
-        local allSteps = SongUtil.GetPlayableSteps(song)
-        -- Show value that matches the currently selected difficulty.
         local steps = nil
-        if #allSteps == 1 then
-            -- If there's only a single difficulty, don't try to match the difficulty. Just show the only one.
-            -- This is important for tournament packs which usually have other difficulties removed.
-            steps = allSteps[1]
+        -- currentStep doesn't guarantee currentSteps isn't nil
+        if song == currentSong and currentSteps then
+            steps = currentSteps
         else
-            -- TODO: Match the engine (or theme?) behaviour on which difficulty will be autoselected from this chart
-            -- if there's no exact match.
-            for k, v in ipairs(allSteps) do
-                if v:GetDifficulty() == currentDifficulty then
-                    steps = v
+            -- Show value from a different song that matches the currently selected difficulty.
+            local allSteps = SongUtil.GetPlayableSteps(song)
+            if #allSteps == 1 then
+                -- If there's only a single difficulty, don't try to match the difficulty. Just show the only one.
+                -- This is important for tournament packs which usually have other difficulties removed.
+                steps = allSteps[1]
+            else
+                -- Matches the engine behaviour on which Grade is displayed
+                for v in ivalues(allSteps) do
+                    if v:GetStepsType() == currentStepsType and v:GetDifficulty() == currentDifficulty then
+                        steps = v
+                        break
+                    end
                 end
             end
         end
@@ -340,7 +364,7 @@ return Def.BitmapText {
                 groovestats_score = SetGetGSCachedScore(steps, false)
             end
         end
-        
+
         EXScore_DBG(song:GetMainTitle() .. " -- local_score: " .. tostring(local_score) .. " local_score_color: " .. tostring(local_score_color))
 
         -- Display the best score
@@ -360,6 +384,7 @@ return Def.BitmapText {
         -- Flag that we are already displaying an accurate result for the song & difficulty pair
         self.Song = song
         self.Difficulty = currentDifficulty
+        self.Steps = steps
     end,
 
     CacheUpdatedGSMessageCommand = function(self, params)

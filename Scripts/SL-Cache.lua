@@ -28,6 +28,8 @@ local function CacheInitialize()
 	]])
 
 	Cache_DBG("Created tables")
+	db:exec("PRAGMA journal_mode=WAL;")
+  	db:exec("PRAGMA synchronous=NORMAL;")
 	return db
 end
 
@@ -65,6 +67,7 @@ local function CacheGet(player, hash, score_type, score_source)
 	stmt:bind_values(player, hash, score_type, score_source)
 	local ret_step = stmt:step()
 	if ret_step ~= sqlite3.ROW then
+		stmt:finalize()
 		return nil, nil
 	end
 	local score = stmt:get_value(0)

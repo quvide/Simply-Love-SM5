@@ -6,7 +6,10 @@ PlayerMusicWheelScore_No = "No"
 PlayerMusicWheelScore_Yes = "Yes"
 PlayerMusicWheelScore_ReplaceGrade = "Replace Grade"
 
+-- Effective setting for pn, also checks the global theme flag and IsHumanPlayer.
 function PlayerMusicWheelScore(pn)
+	if not SLMusicWheelScoreEnabled() then return PlayerMusicWheelScore_No end
+	if not GAMESTATE:IsHumanPlayer(pn) then return PlayerMusicWheelScore_No end
 	return SL[ToEnumShortString(pn)].ActiveModifiers.PlayerMusicWheelScore
 end
 

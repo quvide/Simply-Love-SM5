@@ -53,7 +53,7 @@ local af = Def.ActorFrame {
 		--     NumTimesPlayed (number)
 		--     HighScoreList (as of ITGmania 1.0.1 -- NOTE: can be removed in a future version)
 		SetGradeCommand=function(self, params)
-			local musicWheelScoreReplaceGrade = SLMusicWheelScoreEnabled() and PlayerMusicWheelScore(params.PlayerNumber) == PlayerMusicWheelScore_ReplaceGrade
+			local musicWheelScoreReplaceGrade = PlayerMusicWheelScore(params.PlayerNumber) == PlayerMusicWheelScore_ReplaceGrade
 			if not params.Grade or musicWheelScoreReplaceGrade then
 				self:visible(false)
 				return

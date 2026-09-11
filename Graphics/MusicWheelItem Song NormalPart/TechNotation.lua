@@ -17,10 +17,27 @@ local af = Def.BitmapText {
 		self:zoom(0.6)
 		if DarkUI() then self:diffuse(0, 0, 0, 1) end
 	end,
+
+	PlayerJoinedMessageCommand = function(self) self:queuecommand("Refresh") end,
+	PlayerUnjoinedMessageCommand = function(self) self:queuecommand("Refresh") end,
+	PlayerProfileSetMessageCommand = function(self) self:queuecommand("Refresh") end,
+
+	RefreshCommand = function(self)
+		self:visible(false)
+		if self.LatestSetSong then
+			self:playcommand("Set", { Song = self.LatestSetSong })
+		end
+	end,
+
 	-- Set is called by MusicWheelItem::HandleMessage. There are a bunch of messages that can trigger it.
 	SetCommand = function(self, params)
 		-- default to invisible, if we fail to process something, we just return immediately and stay hidden
 		self:visible(false)
+
+		-- stored for RefreshCommand
+		if params and params.Song then
+			self.LatestSetSong = params.Song
+		end
 
 		-- params is null sometimes for some reason?
 		-- this seems to happen when changing songs and the previous diff doesn't exist for the new one
@@ -43,12 +60,12 @@ local af = Def.BitmapText {
 
 		-- TODO: is there a better way of laying this out?
 		local x_offset = 10
-		local musicWheelScoreYes = SLMusicWheelScoreEnabled() and (PlayerMusicWheelScore(PLAYER_1) == PlayerMusicWheelScore_Yes or PlayerMusicWheelScore(PLAYER_2) == PlayerMusicWheelScore_Yes)
-		local musicWheelScoreNo = (not SLMusicWheelScoreEnabled()) or PlayerMusicWheelScore(PLAYER_1) == PlayerMusicWheelScore_No or PlayerMusicWheelScore(PLAYER_2) == PlayerMusicWheelScore_No
-		-- If MusicWheelScore is No, there's a score displayed on the right side only if it's ITL
+		local anyMusicWheelScoreYes = PlayerMusicWheelScore(PLAYER_1) == PlayerMusicWheelScore_Yes or PlayerMusicWheelScore(PLAYER_2) == PlayerMusicWheelScore_Yes
+		local itlScoreOnRight = not SLMusicWheelScoreEnabled() and IsItlSong(song, player)
+		-- If ITL and MusicWheelScore disabled in theme, there's a score displayed on the right side
 		-- If MusicWheelScore is Yes, there's a score displayed on the right side (regardless of ITL)
 		-- If MusicWheelScore is ReplaceGrade, there's no score displayed on the right side (regardless of ITL)
-		if (musicWheelScoreNo and IsItlSong(song, player)) or musicWheelScoreYes then
+		if itlScoreOnRight or anyMusicWheelScoreYes then
 			-- We have ITL_EXscore or Score on the rightmost side
 			x_offset = 60
 		end

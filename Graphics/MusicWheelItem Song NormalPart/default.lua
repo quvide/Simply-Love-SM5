@@ -2,35 +2,28 @@
 -- use that as a common base, and add in a Sprite for "Has Edit"
 local af = LoadActor("../MusicWheelItem Course NormalPart.lua")
 
-local disableHasEditSprite = false
-
 -- Player-specific actors
 for player in ivalues(PlayerNumber) do
 	if ThemePrefs.Get("MusicWheelTechNotation") ~= "No" then
 		af[#af + 1] = LoadActor("TechNotation.lua", player)
-		disableHasEditSprite = true
 	end
 
 	af[#af+1] = LoadActor("Favorites.lua", player)
 	af[#af+1] = LoadActor("Unlocks.lua", player)
 
 	if SLMusicWheelScoreEnabled() then
-		local playerMusicWheelScore = PlayerMusicWheelScore(player)
-		if playerMusicWheelScore ~= PlayerMusicWheelScore_No then
-			af[#af + 1] = LoadActor("Score.lua", player)
-		end
-		if playerMusicWheelScore == PlayerMusicWheelScore_Yes then
-			disableHasEditSprite = true
-		end
+		af[#af + 1] = LoadActor("Score.lua", player)
 	else
 		af[#af + 1] = LoadActor("ITL_EXScore.lua", player)
 	end
 end
 
 
-if disableHasEditSprite then
+if ThemePrefs.Get("MusicWheelTechNotation") ~= "No" then
+	-- disable HasEdit if tech notation is displayed
 	return af
 end
+
 -- using a png in a Sprite ties the visual to a specific rasterized font (currently Miso),
 -- but Sprites are cheaper than BitmapTexts, so we should use them where dynamic text is not needed
 local stepstype = GAMESTATE:GetCurrentStyle():GetStepsType()
@@ -43,7 +36,13 @@ af[#af+1] = Def.Sprite{
 		if DarkUI() then self:diffuse(0,0,0,1) end
 	end,
 	SetCommand=function(self, params)
-		self:visible(params.Song and params.Song:HasEdits(stepstype) or false)
+		local hideDueToMusicWheelScore = false
+		for player in ivalues(PlayerNumber) do
+			if PlayerMusicWheelScore(player) == PlayerMusicWheelScore_Yes then
+				hideDueToMusicWheelScore = true
+			end
+		end
+		self:visible(not hideDueToMusicWheelScore and params.Song and params.Song:HasEdits(stepstype) or false)
 	end
 }
 
