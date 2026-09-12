@@ -86,6 +86,10 @@ local af = Def.ActorFrame{
 	-- This is only added in "dance" mode and if the service is available.
 	LoadActor("./Leaderboard.lua"),
 
+	-- Fetches the player's best ArrowCloud score for the focused chart into the
+	-- score cache so the music wheel can display it. No visual elements.
+	LoadActor("./ArrowCloudScores.lua"),
+
 	LoadActor("./SongSearch/default.lua"),
 }
 

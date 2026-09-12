@@ -144,6 +144,7 @@ LoadProfileCustom = function(profile, dir)
 
 		SL[pn]:initialize()
 		ParseGrooveStatsIni(player)
+		ParseArrowCloudIni(player)
 		ReadItlFile(player)
 
 		SL[pn].Stages = stages

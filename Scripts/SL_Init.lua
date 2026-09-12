@@ -135,6 +135,8 @@ local PlayerDefaults = {
 			-- The GrooveStats API key loaded for this player
 			self.ApiKey = ""
 			self.GrooveStatsUsername = ""
+			-- The ArrowCloud API key loaded for this player (see ParseArrowCloudIni)
+			self.ArrowCloudApiKey = ""
 			-- Whether or not the player is playing on pad.
 			self.IsPadPlayer = false
 			self.Favorites = {}

@@ -191,3 +191,37 @@ end
 function CacheGetLocalITG(player, hash)
 	return CacheGet(player, hash, "itg", "local")
 end
+
+-- ArrowCloud rows carry a colour index only when the grade pins the lamp down
+-- (see GradeToAwardMapIndex in ScreenSelectMusic overlay/ArrowCloudScores.lua);
+-- otherwise the colour is nil and the wheel draws the score white.
+
+---@param player string
+---@param hash string
+---@param score string
+---@param color string?
+function CacheSetACEX(player, hash, score, color)
+	CacheSet(player, hash, score, "ex", "arrowcloud", color)
+end
+
+---@param player string
+---@param hash string
+---@return string?, string?
+function CacheGetACEX(player, hash)
+	return CacheGet(player, hash, "ex", "arrowcloud")
+end
+
+---@param player string
+---@param hash string
+---@param score string
+---@param color string?
+function CacheSetACITG(player, hash, score, color)
+	CacheSet(player, hash, score, "itg", "arrowcloud", color)
+end
+
+---@param player string
+---@param hash string
+---@return string?, string?
+function CacheGetACITG(player, hash)
+	return CacheGet(player, hash, "itg", "arrowcloud")
+end

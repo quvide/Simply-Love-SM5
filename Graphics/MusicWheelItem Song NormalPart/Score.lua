@@ -102,6 +102,29 @@ local function SetGetGSCachedScore(steps, ex)
     return nil
 end
 
+-- ArrowCloud rows are written by ScreenSelectMusic overlay/ArrowCloudScores.lua.
+-- The colour index is only present when the grade pins the lamp down.
+---@return string?, table?
+local function GetACCachedScore(steps, ex)
+    local chart_gs_hash = steps:GetGrooveStatsHash()
+    local player_name = PROFILEMAN:GetPlayerName(player)
+
+    local t = SLProf.Begin()
+    local cached_score, cached_idx
+    if ex then
+        cached_score, cached_idx = CacheGetACEX(player_name, chart_gs_hash)
+    else
+        cached_score, cached_idx = CacheGetACITG(player_name, chart_gs_hash)
+    end
+    SLProf.End("AC.CacheGet", t)
+
+    if cached_score == nil then
+        return nil, nil
+    end
+    local color = cached_idx ~= nil and SL.JudgmentColors["FA+"][tonumber(cached_idx)] or nil
+    return cached_score, color
+end
+
 local function GetSetLocalCachedScore(song, steps, ex)
     local pn = ToEnumShortString(player)
     local chart_gs_hash = steps:GetGrooveStatsHash()
@@ -371,6 +394,13 @@ local function RunSet(self, params)
     ---@type string?
     local groovestats_score = nil
 
+    -- ArrowCloud score, fetched and cached by ArrowCloudScores.lua on ScreenSelectMusic,
+    -- which broadcasts CacheUpdatedGS as well.
+    ---@type string?
+    local arrowcloud_score = nil
+    ---@type table?
+    local arrowcloud_score_color = nil
+
     t = SLProf.Begin()
     local_score, local_score_color = GetSetLocalCachedScore(song, steps, showExScore)
     SLProf.End("Set.LocalScore", t)
@@ -379,21 +409,35 @@ local function RunSet(self, params)
         groovestats_score = SetGetGSCachedScore(steps, showExScore)
         SLProf.End("Set.GSScore", t)
     end
+    if (SL[ToEnumShortString(player)].ArrowCloudApiKey or "") ~= "" then
+        t = SLProf.Begin()
+        arrowcloud_score, arrowcloud_score_color = GetACCachedScore(steps, showExScore)
+        SLProf.End("Set.ACScore", t)
+    end
 
-    if EXSCORE_DEBUG then EXScore_DBG(song:GetMainTitle() .. " -- local_score: " .. tostring(local_score) .. " local_score_color: " .. tostring(local_score_color)) end
+    if EXSCORE_DEBUG then EXScore_DBG(song:GetMainTitle() .. " -- local_score: " .. tostring(local_score) .. " local_score_color: " .. tostring(local_score_color) .. " ac: " .. tostring(arrowcloud_score) .. " gs: " .. tostring(groovestats_score)) end
 
-    -- Display the best score
+    -- Display the best score. Candidates are considered in priority order and a
+    -- later one only wins by being strictly higher, so on a tie the source that
+    -- knows the most about the lamp is shown: local (full judgment counts), then
+    -- ArrowCloud (grade pins the lamp down at the extremes), then GrooveStats
+    -- (score only). A source without a known lamp colour is drawn white.
     t = SLProf.Begin()
-    if local_score ~= nil and tonumber(local_score) >= tonumber(groovestats_score or "0") then
-        self:settext(local_score)
-        self:diffuse(local_score_color)
-        self:visible(true)
-    elseif groovestats_score ~= nil and tonumber(groovestats_score) > (tonumber(local_score) or 0) then
-        self:settext(groovestats_score)
-        -- We don't get timing counts from GS so we don't know what lamp color this would be.
-        -- If we also have the score locally (technically it might not be the same score as
-        -- multiple scores could have the same EX), it's shown by the earlier if branch.
-        self:diffuse(color("#ffffff"))
+    local white = color("#ffffff")
+    local best_score, best_color, best_value = nil, nil, nil
+    local function Consider(score, score_color)
+        local value = score ~= nil and tonumber(score) or nil
+        if value ~= nil and (best_value == nil or value > best_value) then
+            best_score, best_color, best_value = score, score_color or white, value
+        end
+    end
+    Consider(local_score, local_score_color)
+    Consider(arrowcloud_score, arrowcloud_score_color)
+    Consider(groovestats_score, nil)
+
+    if best_score ~= nil then
+        self:settext(best_score)
+        self:diffuse(best_color)
         self:visible(true)
     end
 
