@@ -411,6 +411,11 @@ local function RunSet(self, params)
     end
     if (SL[ToEnumShortString(player)].ArrowCloudApiKey or "") ~= "" then
         t = SLProf.Begin()
+        -- Ask for this chart's row if the cache has none. This runs once per song
+        -- this item shows (the cache-hit path above skips it), so every chart in
+        -- view is requested as soon as the wheel shows it. A hot response fills
+        -- the row synchronously, hence the request goes before the read.
+        ArrowCloudScores.Request(player, steps, song)
         arrowcloud_score, arrowcloud_score_color = GetACCachedScore(steps, showExScore)
         SLProf.End("Set.ACScore", t)
     end
