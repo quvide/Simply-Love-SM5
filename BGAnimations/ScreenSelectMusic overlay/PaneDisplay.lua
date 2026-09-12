@@ -375,10 +375,24 @@ for player in ivalues(PlayerNumber) do
 
 	af2.OnCommand=function(self)                                    self:playcommand("Set") end
 	af2.SLGameModeChangedMessageCommand=function(self)              self:playcommand("Set") end
-	af2.CurrentCourseChangedMessageCommand=function(self)			self:playcommand("Set") end
-	af2.CurrentSongChangedMessageCommand=function(self)				self:playcommand("Set") end
-	af2["CurrentSteps"..pn.."ChangedMessageCommand"]=function(self) self:playcommand("Set") end
-	af2["CurrentTrail"..pn.."ChangedMessageCommand"]=function(self) self:playcommand("Set") end
+
+	-- One wheel step broadcasts CurrentSongChanged and CurrentSteps<P>Changed back to
+	-- back (plus course/trail in course mode). Each Set is a full refresh of every
+	-- pane child, so coalesce the burst into a single Set on the next update.
+	local function RequestSet(self)
+		if not self.SetPending then
+			self.SetPending = true
+			self:queuecommand("CoalescedSet")
+		end
+	end
+	af2.CoalescedSetCommand=function(self)
+		self.SetPending = false
+		self:playcommand("Set")
+	end
+	af2.CurrentCourseChangedMessageCommand=RequestSet
+	af2.CurrentSongChangedMessageCommand=RequestSet
+	af2["CurrentSteps"..pn.."ChangedMessageCommand"]=RequestSet
+	af2["CurrentTrail"..pn.."ChangedMessageCommand"]=RequestSet
 
 	-- -----------------------------------------------------------------------
 	-- colored background Quad

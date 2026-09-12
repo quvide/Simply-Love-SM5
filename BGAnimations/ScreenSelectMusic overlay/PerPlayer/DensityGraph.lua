@@ -81,19 +81,24 @@ af[#af+1] = Def.ActorFrame{
 		self:playcommand("Hide")
 	end,
 	["CurrentSteps"..pn.."ChangedMessageCommand"]=function(self)
+		-- Both steps below are debounced so that scrolling through the wheel
+		-- only does the work for the chart we settle on, not every chart passed.
+		-- ParseChartInfo plus the redraw cost about half a millisecond per
+		-- player per step; the GrooveStats hash requires parsing the simfile and
+		-- is far more expensive, so it waits longer still. ScreenGameplay parses
+		-- chart info itself on entry, so leaving here early is safe.
+		self:stoptweening()
+		self:sleep(0.1)
+		self:queuecommand("ParseAndShow")
+		self:sleep(0.3)
+		self:queuecommand("ComputeHash")
+	end,
+	ParseAndShowCommand=function(self)
 		local steps = GAMESTATE:GetCurrentSteps(player)
 		if steps then
 			ParseChartInfo(steps, pn)
 			self:playcommand("Show")
 		end
-
-		-- Computing the GrooveStats hash requires parsing the simfile, which is
-		-- expensive. Debounce it so that scrolling through the wheel doesn't
-		-- parse every chart we pass over, only the one we settle on.
-		-- Only needed for GrooveStats score/leaderboard lookups.
-		self:stoptweening()
-		self:sleep(0.4)
-		self:queuecommand("ComputeHash")
 	end,
 	ComputeHashCommand=function(self)
 		local steps = GAMESTATE:GetCurrentSteps(player)

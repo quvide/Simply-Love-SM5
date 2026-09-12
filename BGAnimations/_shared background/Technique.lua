@@ -14,14 +14,16 @@ local t = Def.ActorFrame {
 	InitCommand=function(self)
 		local style = ThemePrefs.Get("VisualStyle")
 		self:visible(style == "Technique")
+		-- See Normal.lua: hidden layers should not update either.
+		if style ~= "Technique" then self:hibernate(math.huge) end
 	end,
 	OnCommand=function(self) self:fov(90):accelerate(0.8):diffusealpha(1) end,
-	HideCommand=function(self) self:visible(false) end,
+	HideCommand=function(self) self:visible(false):hibernate(math.huge) end,
 
 	VisualStyleSelectedMessageCommand=function(self)
 		local style = ThemePrefs.Get("VisualStyle")
 		if style == "Technique" then
-			self:visible(true):linear(0.6):diffusealpha(1)
+			self:hibernate(0):visible(true):linear(0.6):diffusealpha(1)
 		else
 			self:linear(0.6):diffusealpha(0):queuecommand("Hide")
 		end

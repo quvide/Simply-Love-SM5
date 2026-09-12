@@ -76,7 +76,13 @@ if not GAMESTATE:IsCourseMode() then
 		OffCommand=function(self)
 			self:bouncebegin(0.15)
 		end,
-		CurrentSongChangedMessageCommand=function(self) self:playcommand("SetCD") end,
+		-- Loading the CD title texture is synchronous and can take tens of
+		-- milliseconds. Hide at once, then debounce the load so only the song the
+		-- wheel settles on pays for it, not every song scrolled past.
+		CurrentSongChangedMessageCommand=function(self)
+			self:visible(false)
+			self:stoptweening():sleep(0.15):queuecommand("SetCD")
+		end,
 		SwitchFocusToGroupsMessageCommand=function(self) self:GetChild("CdTitle"):visible(false) end,
 		SetCDCommand=function(self)
 			SongOrCourse = GAMESTATE:IsCourseMode() and GAMESTATE:GetCurrentCourse() or GAMESTATE:GetCurrentSong()

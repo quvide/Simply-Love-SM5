@@ -13,10 +13,14 @@ local anim_data = {
 local t = Def.ActorFrame {
 	InitCommand=function(self)
 		local style = ThemePrefs.Get("VisualStyle")
-		self:visible(not ThemePrefs.Get("RainbowMode") and style ~= "SRPG10" and style ~= "Technique")
+		local shown = not ThemePrefs.Get("RainbowMode") and style ~= "SRPG10" and style ~= "Technique"
+		self:visible(shown)
+		-- A hidden layer is still updated every frame (tweens, texcoord scrolling
+		-- on each sprite). Hibernate it so it costs nothing until it is shown.
+		if not shown then self:hibernate(math.huge) end
 	end,
 	OnCommand=function(self) self:accelerate(0.8):diffusealpha(1) end,
-	HideCommand=function(self) self:visible(false) end,
+	HideCommand=function(self) self:visible(false):hibernate(math.huge) end,
 
 	VisualStyleSelectedMessageCommand=function(self)
 		local style = ThemePrefs.Get("VisualStyle")
@@ -24,7 +28,7 @@ local t = Def.ActorFrame {
 		if ThemePrefs.Get("RainbowMode") or style == "SRPG10" or style == "Technique" then
 			self:linear(0.6):diffusealpha(0):queuecommand("Hide")
 		else
-			self:visible(true):linear(0.6):diffusealpha(1)
+			self:hibernate(0):visible(true):linear(0.6):diffusealpha(1)
 
 			local new_file = THEME:GetPathG("", "_VisualStyles/" .. style .. "/SharedBackground.png")
 			self:RunCommandsOnChildren(function(child) child:Load(new_file) end)

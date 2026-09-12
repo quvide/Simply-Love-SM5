@@ -1,7 +1,10 @@
 local sqlite3 = sqlite3 -- Provided by lsqlite3
 
+-- Guard every Cache_DBG call site with this flag so the string.format argument is not
+-- evaluated when logging is off; it was measured at roughly the cost of the SQL step.
+local CACHE_DEBUG = false
 local function Cache_DBG(message)
-	-- lua.Info(message)
+	lua.Info(message)
 end
 
 local function CacheInitialize()
@@ -27,7 +30,7 @@ local function CacheInitialize()
 		);
 	]])
 
-	Cache_DBG("Created tables")
+	if CACHE_DEBUG then Cache_DBG("Created tables") end
 	db:exec("PRAGMA journal_mode=WAL;")
   	db:exec("PRAGMA synchronous=NORMAL;")
 	return db
@@ -38,6 +41,61 @@ if not Db then
 	lua.Warn("Initializing SL cache failed")
 end
 
+-- Statements are prepared once and reused. Parsing the SQL was measured at roughly the
+-- same cost as executing it, so each call only binds, steps and resets.
+-- reset() returns the statement to its initial state so it can be stepped again, and
+-- releases any lock the previous step held. Bindings are overwritten by bind_values.
+local SetStmt = Db and Db:prepare("INSERT INTO score_cache(player, hash, score, score_type, score_source, score_color) VALUES (?, ?, ?, ?, ?, ?)")
+local LoadStmt = Db and Db:prepare("SELECT hash, score_type, score_source, score, score_color FROM score_cache WHERE player=?")
+if Db and not (SetStmt and LoadStmt) then
+	lua.Warn("Preparing SL cache statements failed")
+	Db = nil
+end
+
+-- In-memory mirror of the score_cache table, one inner table per player.
+-- Mem[player][key] is { score, score_color }. On the first read for a player, every row
+-- that player has is loaded in one query and Loaded[player] is set; from then on a
+-- missing key is authoritative and SQLite is never read again for that player.
+-- Every write goes through CacheSet, which updates both, so the mirror cannot drift
+-- from the database within a session.
+local Mem = {}
+local Loaded = {}
+
+local function MemKey(hash, score_type, score_source)
+	return hash .. "|" .. score_type .. "|" .. score_source
+end
+
+local function MemTable(player)
+	local t = Mem[player]
+	if t == nil then
+		t = {}
+		Mem[player] = t
+	end
+	return t
+end
+
+-- Load all of a player's rows into memory once. The unique index leads with player,
+-- so this is an index range scan. Called lazily from CacheGet so no profile-load hook
+-- is needed; the one-time cost lands on the first wheel item Set of the session.
+local function MemLoad(player)
+	if Loaded[player] or not Db then return end
+	local t = SLProf.Begin()
+	local mem = MemTable(player)
+	local rows = 0
+	LoadStmt:bind_values(player)
+	while LoadStmt:step() == sqlite3.ROW do
+		local hash = LoadStmt:get_value(0)
+		local score_type = LoadStmt:get_value(1)
+		local score_source = LoadStmt:get_value(2)
+		mem[MemKey(hash, score_type, score_source)] = { LoadStmt:get_value(3), LoadStmt:get_value(4) }
+		rows = rows + 1
+	end
+	LoadStmt:reset()
+	Loaded[player] = true
+	SLProf.Count("Cache.Load.rows", rows)
+	SLProf.End("Cache.Load", t)
+end
+
 ---@param player string
 ---@param hash string
 ---@param score string
@@ -45,13 +103,19 @@ end
 ---@param score_source string
 ---@param score_color string?
 local function CacheSet(player, hash, score, score_type, score_source, score_color)
+	MemTable(player)[MemKey(hash, score_type, score_source)] = { score, score_color }
 	if not Db then return end
 
-	Cache_DBG(string.format("CacheSet %s %s %s %s %s %s", player, hash, score, score_type, score_source, score_color or "nil"))
-	local stmt = Db:prepare("INSERT INTO score_cache(player, hash, score, score_type, score_source, score_color) VALUES (?, ?, ?, ?, ?, ?)")
-	stmt:bind_values(player, hash, score, score_type, score_source, score_color)
-	stmt:step()
-	stmt:finalize()
+	if CACHE_DEBUG then Cache_DBG(string.format("CacheSet %s %s %s %s %s %s", player, hash, score, score_type, score_source, score_color or "nil")) end
+	local t_all = SLProf.Begin()
+	local t = SLProf.Begin()
+	SetStmt:bind_values(player, hash, score, score_type, score_source, score_color)
+	SetStmt:step()
+	SLProf.End("Cache.Set.step", t)
+	t = SLProf.Begin()
+	SetStmt:reset()
+	SLProf.End("Cache.Set.reset", t)
+	SLProf.End("Cache.Set", t_all)
 end
 
 ---@param player string
@@ -60,20 +124,14 @@ end
 ---@param score_source string
 ---@return string?, string?
 local function CacheGet(player, hash, score_type, score_source)
-	if not Db then return nil, nil end
-
-	Cache_DBG(string.format("CacheGet %s %s %s %s", player, hash, score_type, score_source))
-	local stmt = Db:prepare("SELECT score, score_color FROM score_cache WHERE player=? AND hash=? AND score_type=? AND score_source=?")
-	stmt:bind_values(player, hash, score_type, score_source)
-	local ret_step = stmt:step()
-	if ret_step ~= sqlite3.ROW then
-		stmt:finalize()
+	MemLoad(player)
+	local hit = MemTable(player)[MemKey(hash, score_type, score_source)]
+	if hit == nil then
+		SLProf.Count("Cache.Mem.miss")
 		return nil, nil
 	end
-	local score = stmt:get_value(0)
-	local score_color = stmt:get_value(1)
-	stmt:finalize()
-	return score, score_color
+	SLProf.Count("Cache.Mem.hit")
+	return hit[1], hit[2]
 end
 
 ---@param player string

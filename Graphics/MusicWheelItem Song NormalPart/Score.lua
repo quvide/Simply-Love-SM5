@@ -87,11 +87,13 @@ local function SetGetGSCachedScore(steps, ex)
     local player_name = PROFILEMAN:GetPlayerName(player)
 
     local cached_score = nil
+    local t = SLProf.Begin()
     if ex then
         cached_score = CacheGetGSEX(player_name, chart_gs_hash)
     else
         cached_score = CacheGetGSITG(player_name, chart_gs_hash)
     end
+    SLProf.End("GS.CacheGet", t)
 
     if cached_score ~= nil then
         return cached_score
@@ -106,68 +108,84 @@ local function GetSetLocalCachedScore(song, steps, ex)
     local current_song = GAMESTATE:GetCurrentSong()
 
     local player_name = PROFILEMAN:GetPlayerName(player)
+    local t = SLProf.Begin()
     local highscores = PROFILEMAN:GetProfile(pn):GetHighScoreList(song, steps):GetHighScores()
+    SLProf.End("Local.GetHighScores", t)
+
+    -- The cache is keyed by chart hash, so a row may have come from another copy of the
+    -- same chart in a different pack, or from a play whose profile was never saved. The
+    -- cached row is treated as authoritative: the live high score list only replaces it
+    -- when it offers a strictly better score. Scores are "%05.2f" strings, compared numerically.
+    local function MergeWithCache(live_score, live_idx, cached_score, cached_idx, setter)
+        if cached_score ~= nil and (live_score == nil or tonumber(cached_score) >= tonumber(live_score)) then
+            return cached_score, tonumber(cached_idx)
+        end
+        if live_score ~= nil then
+            t = SLProf.Begin()
+            -- without ("%d"):format, the index gets stored as a float string in sqlite
+            setter(player_name, chart_gs_hash, live_score, ("%d"):format(live_idx))
+            SLProf.End("Local.CacheSet", t)
+        end
+        return live_score, live_idx
+    end
 
     if ex then
+        t = SLProf.Begin()
         local cached_ex, cached_award_map_idx = CacheGetLocalEX(player_name, chart_gs_hash)
+        SLProf.End("Local.CacheGet", t)
 
-        ---@type string|number|nil
-        local best_ex = nil
-        ---@type integer?
-        local best_ex_award_map_idx = nil
-
-        if cached_ex == nil or song == current_song then
-            -- Calculate from all local scores
-            local hs_for_best_ex = nil
-            for hs in ivalues(highscores) do
-                if MusicRateFromHighscore(hs) >= 1 then
-                    local ex = CalculateExScoreFromHighscoreAndSteps(hs, steps, pn)
-                    if ex ~= nil and best_ex == nil then
-                        best_ex = ex
-                        hs_for_best_ex = hs
-                    elseif ex ~= nil and ex > best_ex then
-                        best_ex = ex
-                        hs_for_best_ex = hs
-                    end
-                end
-            end
-
-            if best_ex ~= nil then
-                best_ex = ("%05.2f"):format(best_ex)
-                best_ex_award_map_idx = AwardMapIndexColorForHighScore(hs_for_best_ex)
-                CacheSetLocalEX(player_name, chart_gs_hash, best_ex, ("%d"):format(best_ex_award_map_idx))
-            end
-        else
-            best_ex = cached_ex
-            best_ex_award_map_idx = tonumber(cached_award_map_idx)
+        if cached_ex ~= nil and song ~= current_song then
+            return cached_ex, SL.JudgmentColors["FA+"][tonumber(cached_award_map_idx)]
         end
 
-        local best_ex_color = SL.JudgmentColors["FA+"][best_ex_award_map_idx]
-
-        return best_ex, best_ex_color
-    else -- ITG score
-        local cached_itg, cached_award_map_idx = CacheGetLocalITG(player_name, chart_gs_hash)
-        if cached_itg == nil or song == current_song then
-            -- TODO: highscores should already be ordered by GetPercentDP, check if they really are?
-            for hs in ivalues(highscores) do
-                if MusicRateFromHighscore(hs) >= 1 then
-                    local itg = hs:GetPercentDP() * 100
-                    -- TODO: does AwardMapIndexColorForHighScore work properly for ITG scores?
-                    local itg_award_map_idx = AwardMapIndexColorForHighScore(hs)
-                    if itg ~= nil then
-                        -- Store ITG score in cache too as this allows sharing scores between charts that are in several packs
-                        local itg_string = ("%05.2f"):format(itg)
-                        -- without tostring(itg_award_map_idx), for some reason gets stored as float string in sqlite
-                        CacheSetLocalITG(player_name, chart_gs_hash, itg_string, ("%d"):format(itg_award_map_idx))
-                        return itg_string, SL.JudgmentColors["FA+"][itg_award_map_idx]
-                    end
+        -- Calculate from all local scores
+        t = SLProf.Begin()
+        SLProf.Count("Local.EXCalc.highscores", #highscores)
+        ---@type number?
+        local live_ex = nil
+        local hs_for_live_ex = nil
+        for hs in ivalues(highscores) do
+            if MusicRateFromHighscore(hs) >= 1 then
+                local ex_value = CalculateExScoreFromHighscoreAndSteps(hs, steps, pn)
+                if ex_value ~= nil and (live_ex == nil or ex_value > live_ex) then
+                    live_ex = ex_value
+                    hs_for_live_ex = hs
                 end
             end
-        else
+        end
+        SLProf.End("Local.EXCalc", t)
+
+        local live_ex_string, live_idx = nil, nil
+        if live_ex ~= nil then
+            live_ex_string = ("%05.2f"):format(live_ex)
+            live_idx = AwardMapIndexColorForHighScore(hs_for_live_ex)
+        end
+
+        local best_ex, best_idx = MergeWithCache(live_ex_string, live_idx, cached_ex, cached_award_map_idx, CacheSetLocalEX)
+        return best_ex, SL.JudgmentColors["FA+"][best_idx]
+    else -- ITG score
+        t = SLProf.Begin()
+        local cached_itg, cached_award_map_idx = CacheGetLocalITG(player_name, chart_gs_hash)
+        SLProf.End("Local.CacheGet", t)
+
+        if cached_itg ~= nil and song ~= current_song then
             return cached_itg, SL.JudgmentColors["FA+"][tonumber(cached_award_map_idx)]
         end
 
-        return nil, nil
+        -- The high score list is ordered by PercentDP under PercentageScoring, so the first
+        -- eligible entry is the best one.
+        local live_itg_string, live_idx = nil, nil
+        for hs in ivalues(highscores) do
+            if MusicRateFromHighscore(hs) >= 1 then
+                live_itg_string = ("%05.2f"):format(hs:GetPercentDP() * 100)
+                -- TODO: does AwardMapIndexColorForHighScore work properly for ITG scores?
+                live_idx = AwardMapIndexColorForHighScore(hs)
+                break
+            end
+        end
+
+        local best_itg, best_idx = MergeWithCache(live_itg_string, live_idx, cached_itg, cached_award_map_idx, CacheSetLocalITG)
+        return best_itg, SL.JudgmentColors["FA+"][best_idx]
     end
 end
 
@@ -203,9 +221,189 @@ local function UpdatePosition(actor)
     end
 end
 
+-- Guard call sites that build their message (concatenation, GetSongDir etc.) with this
+-- flag so the argument is not evaluated when logging is off.
+local EXSCORE_DEBUG = false
 local function EXScore_DBG(message)
-    -- uncomment this line to enable debug logs
-    -- lua.Info(message)
+    lua.Info(message)
+end
+
+-- The body of SetCommand. Returns a short label describing which exit was taken,
+-- which SetCommand uses as the profiler section name.
+local function RunSet(self, params)
+    if EXSCORE_DEBUG then EXScore_DBG("Running SetCommand") end
+
+    -- stored for RefreshCommand
+    if params and params.Song then
+        self.LatestSetSong = params.Song
+    end
+
+    -- Section headers, sort entries etc. carry no Song, and the engine hides the whole
+    -- Song NormalPart for them, so there is nothing to compute or lay out. Bail before
+    -- the gates. The CacheUpdatedGS replay passes no Song either but must proceed.
+    if params == nil or (params.Song == nil and params.CacheUpdatedGS == nil) then
+        if EXSCORE_DEBUG then EXScore_DBG("Early return due to nil song.") end
+        return "exit_nil_song"
+    end
+
+    -- Goal here is to utilize different levels of caches to do as little
+    -- processing as possible to keep the UI snappy.
+
+    local currentDifficulty, currentStepsType
+    local currentSteps = GAMESTATE:GetCurrentSteps(player)
+    if currentSteps == nil then
+        -- We're probably on a group header. Match grade behaviour.
+        currentDifficulty = GAMESTATE:GetPreferredDifficulty(player)
+        currentStepsType = GAMESTATE:GetCurrentStyle():GetStepsType()
+    else
+        currentDifficulty = currentSteps:GetDifficulty()
+        currentStepsType = currentSteps:GetStepsType()
+    end
+    
+    local currentSong = GAMESTATE:GetCurrentSong()
+
+    local song = nil
+
+    -- If there's a params.Song, we are being called by the engine.
+    -- In this case we want to check if this actor is already displaying the
+    -- score for this song. If the the difficulty has changed, the steps
+    -- are probably different too. Don't want to move the step selection logic
+    -- so high up as it's more complicated.
+    if params ~= nil and params.Song ~= nil then
+        song = params.Song
+        if self.Song == song and self.Difficulty == currentDifficulty then
+            -- Song could have multiple steps with the same Difficulty
+            if song ~= currentSong or self.Steps == currentSteps then
+                -- Song and difficulty hasn't changed, don't need to update anything!
+                if EXSCORE_DEBUG then EXScore_DBG("Early return due to song being the same as previously") end
+                return "exit_cache_hit"
+            end
+        end
+    -- If we're running due to the groovestats cache being updated (CacheUpdatedGSMessageCommand)
+    -- self.Song must also be set on an earlier round, otherwise the first valid run of this command
+    -- will get the latest cached value anyways.
+    elseif params ~= nil and params.CacheUpdatedGS ~=nil and self.Song ~=nil then
+        song = self.Song
+    -- This branch is ran when
+    -- 1. The engine runs us with a nil params.Song
+    -- 2. CacheUpdatedGS runs us but SetCommand has not yet ran completely.
+    else
+        if EXSCORE_DEBUG then EXScore_DBG("Early return due to nil song.") end
+        return "exit_nil_song"
+    end
+
+    if EXSCORE_DEBUG and song ~= nil then EXScore_DBG("SetCommand song is " .. song:GetSongDir()) end
+
+    -- The gates sit below the cache check on purpose. The cache is only populated on
+    -- the full path, which these gates protect, and every event that can change their
+    -- answer (join, unjoin, profile switch, mode change via a screen reload) clears it,
+    -- so a cache hit implies the gates already passed for the state on screen.
+
+    -- Only display score if enabled in settings
+    if PlayerMusicWheelScore(player) == PlayerMusicWheelScore_No then
+        self:visible(false)
+        return "exit_mode_no"
+    end
+
+    -- Only display EX score if a profile is found for an enabled player.
+    if not GAMESTATE:IsPlayerEnabled(player) or not PROFILEMAN:IsPersistentProfile(player) then
+        self:visible(false):settext("")
+        return "exit_not_enabled"
+    end
+
+    -- Layout depends only on joined players and their modes. Those change only on
+    -- join/unjoin/profile switch, and RefreshCommand clears the cache for those, so
+    -- every such change reaches this point. No need to do it on the cache-hit path.
+    local t = SLProf.Begin()
+    UpdatePosition(self)
+    SLProf.End("Set.UpdatePosition", t)
+
+    -- If we have reached this point, we have a song.
+    -- If there is an early return past this point,
+    -- something was invalid and we don't want to display anything.
+    self:visible(false):settext("")
+    self.Song = nil
+    self.Difficulty = nil
+    self.Steps = nil
+
+    local steps = nil
+    -- currentStep doesn't guarantee currentSteps isn't nil
+    if song == currentSong and currentSteps then
+        steps = currentSteps
+    else
+        -- Show value from a different song that matches the currently selected difficulty.
+        t = SLProf.Begin()
+        local allSteps = SongUtil.GetPlayableSteps(song)
+        SLProf.End("Set.GetPlayableSteps", t)
+        if #allSteps == 1 then
+            -- If there's only a single difficulty, don't try to match the difficulty. Just show the only one.
+            -- This is important for tournament packs which usually have other difficulties removed.
+            steps = allSteps[1]
+        else
+            -- Matches the engine behaviour on which Grade is displayed
+            for v in ivalues(allSteps) do
+                if v:GetStepsType() == currentStepsType and v:GetDifficulty() == currentDifficulty then
+                    steps = v
+                    break
+                end
+            end
+        end
+    end
+
+    if steps == nil then
+        if EXSCORE_DEBUG then EXScore_DBG("Early return due to nil steps") end
+        return "exit_nil_steps"
+    end
+
+    if EXSCORE_DEBUG then EXScore_DBG("Actually calculating something for " .. song:GetMainTitle()) end
+
+    ---@type boolean
+    local showExScore = SL[ToEnumShortString(player)].ActiveModifiers.ShowExScore
+
+    -- Local score. GetSetLocalCached... will recalculate if this song is the currently selected song.
+    ---@type string?
+    local local_score = nil
+    ---@type table?
+    local local_score_color = nil
+
+    -- GrooveStats score. GetSetGSCached... will not call the API, that's done by PaneDisplay.
+    -- PaneDisplay broadcasts CacheUpdatedGS when it writes something to the cache.
+    ---@type string?
+    local groovestats_score = nil
+
+    t = SLProf.Begin()
+    local_score, local_score_color = GetSetLocalCachedScore(song, steps, showExScore)
+    SLProf.End("Set.LocalScore", t)
+    if ThemePrefs.Get("EnableGrooveStats") then
+        t = SLProf.Begin()
+        groovestats_score = SetGetGSCachedScore(steps, showExScore)
+        SLProf.End("Set.GSScore", t)
+    end
+
+    if EXSCORE_DEBUG then EXScore_DBG(song:GetMainTitle() .. " -- local_score: " .. tostring(local_score) .. " local_score_color: " .. tostring(local_score_color)) end
+
+    -- Display the best score
+    t = SLProf.Begin()
+    if local_score ~= nil and tonumber(local_score) >= tonumber(groovestats_score or "0") then
+        self:settext(local_score)
+        self:diffuse(local_score_color)
+        self:visible(true)
+    elseif groovestats_score ~= nil and tonumber(groovestats_score) > (tonumber(local_score) or 0) then
+        self:settext(groovestats_score)
+        -- We don't get timing counts from GS so we don't know what lamp color this would be.
+        -- If we also have the score locally (technically it might not be the same score as
+        -- multiple scores could have the same EX), it's shown by the earlier if branch.
+        self:diffuse(color("#ffffff"))
+        self:visible(true)
+    end
+
+    SLProf.End("Set.Display", t)
+
+    -- Flag that we are already displaying an accurate result for the song & difficulty pair
+    self.Song = song
+    self.Difficulty = currentDifficulty
+    self.Steps = steps
+    return "full"
 end
 
 -- Add EX scores to the song wheel as well.
@@ -233,167 +431,19 @@ return Def.BitmapText {
     end,
 
     SetCommand = function(self, params)
-        EXScore_DBG("Running SetCommand")
-
-        -- stored for RefreshCommand
-        if params and params.Song then
-            self.LatestSetSong = params.Song
-        end
-
-        -- Goal here is to utilize different levels of caches to do as little
-        -- processing as possible to keep the UI snappy.
-
-        -- Only display score if enabled in settings
-        if PlayerMusicWheelScore(player) == PlayerMusicWheelScore_No then
-            self:visible(false)
-            return
-        end
-
-        -- Only display EX score if a profile is found for an enabled player.
-        if not GAMESTATE:IsPlayerEnabled(player) or not PROFILEMAN:IsPersistentProfile(player) then
-            self:visible(false):settext("")
-            return
-        end
-
-        UpdatePosition(self)
-
-        local currentDifficulty, currentStepsType
-        local currentSteps = GAMESTATE:GetCurrentSteps(player)
-        if currentSteps == nil then
-            -- We're probably on a group header. Match grade behaviour.
-            currentDifficulty = GAMESTATE:GetPreferredDifficulty(player)
-            currentStepsType = GAMESTATE:GetCurrentStyle():GetStepsType()
-        else
-            currentDifficulty = currentSteps:GetDifficulty()
-            currentStepsType = currentSteps:GetStepsType()
-        end
-        
-        local currentSong = GAMESTATE:GetCurrentSong()
-
-        local song = nil
-
-        -- If there's a params.Song, we are being called by the engine.
-        -- In this case we want to check if this actor is already displaying the
-        -- score for this song. If the the difficulty has changed, the steps
-        -- are probably different too. Don't want to move the step selection logic
-        -- so high up as it's more complicated.
-        if params ~= nil and params.Song ~= nil then
-            song = params.Song
-            if self.Song == song and self.Difficulty == currentDifficulty then
-                -- Song could have multiple steps with the same Difficulty
-                if song ~= currentSong or self.Steps == currentSteps then
-                    -- Song and difficulty hasn't changed, don't need to update anything!
-                    EXScore_DBG("Early return due to song being the same as previously")
-                    return
-                end
-            end
-        -- If we're running due to the groovestats cache being updated (CacheUpdatedGSMessageCommand)
-        -- self.Song must also be set on an earlier round, otherwise the first valid run of this command
-        -- will get the latest cached value anyways.
-        elseif params ~= nil and params.CacheUpdatedGS ~=nil and self.Song ~=nil then
-            song = self.Song
-        -- This branch is ran when
-        -- 1. The engine runs us with a nil params.Song
-        -- 2. CacheUpdatedGS runs us but SetCommand has not yet ran completely.
-        else
-            EXScore_DBG("Early return due to nil song.")
-            return
-        end
-
-        if song ~= nil then EXScore_DBG("SetCommand song is " .. song:GetSongDir()) end
-
-        -- If we have reached this point, we have a song.
-        -- If there is an early return past this point,
-        -- something was invalid and we don't want to display anything.
-        self:visible(false):settext("")
-        self.Song = nil
-        self.Difficulty = nil
-        self.Steps = nil
-
-        local steps = nil
-        -- currentStep doesn't guarantee currentSteps isn't nil
-        if song == currentSong and currentSteps then
-            steps = currentSteps
-        else
-            -- Show value from a different song that matches the currently selected difficulty.
-            local allSteps = SongUtil.GetPlayableSteps(song)
-            if #allSteps == 1 then
-                -- If there's only a single difficulty, don't try to match the difficulty. Just show the only one.
-                -- This is important for tournament packs which usually have other difficulties removed.
-                steps = allSteps[1]
-            else
-                -- Matches the engine behaviour on which Grade is displayed
-                for v in ivalues(allSteps) do
-                    if v:GetStepsType() == currentStepsType and v:GetDifficulty() == currentDifficulty then
-                        steps = v
-                        break
-                    end
-                end
-            end
-        end
-
-        if steps == nil then
-            EXScore_DBG("Early return due to nil steps")
-            return
-        end
-
-        EXScore_DBG("Actually calculating something for " .. song:GetMainTitle())
-
-        ---@type boolean
-        local showExScore = SL[ToEnumShortString(player)].ActiveModifiers.ShowExScore
-
-        -- Local score. GetSetLocalCached... will recalculate if this song is the currently selected song.
-        ---@type string?
-        local local_score = nil
-        ---@type table?
-        local local_score_color = nil
-
-        -- GrooveStats score. GetSetGSCached... will not call the API, that's done by PaneDisplay.
-        -- PaneDisplay broadcasts CacheUpdatedGS when it writes something to the cache.
-        ---@type string?
-        local groovestats_score = nil
-
-        if showExScore then
-            local_score, local_score_color = GetSetLocalCachedScore(song, steps, true)
-            if ThemePrefs.Get("EnableGrooveStats") then
-                groovestats_score = SetGetGSCachedScore(steps, true)
-            end
-        else
-            local_score, local_score_color = GetSetLocalCachedScore(song, steps, false)
-            if ThemePrefs.Get("EnableGrooveStats") then
-                groovestats_score = SetGetGSCachedScore(steps, false)
-            end
-        end
-
-        EXScore_DBG(song:GetMainTitle() .. " -- local_score: " .. tostring(local_score) .. " local_score_color: " .. tostring(local_score_color))
-
-        -- Display the best score
-        if local_score ~= nil and tonumber(local_score) >= tonumber(groovestats_score or "0") then
-            self:settext(local_score)
-            self:diffuse(local_score_color)
-            self:visible(true)
-        elseif groovestats_score ~= nil and tonumber(groovestats_score) > (tonumber(local_score) or 0) then
-            self:settext(groovestats_score)
-            -- We don't get timing counts from GS so we don't know what lamp color this would be.
-            -- If we also have the score locally (technically it might not be the same score as
-            -- multiple scores could have the same EX), it's shown by the earlier if branch.
-            self:diffuse(color("#ffffff"))
-            self:visible(true)
-        end
-
-        -- Flag that we are already displaying an accurate result for the song & difficulty pair
-        self.Song = song
-        self.Difficulty = currentDifficulty
-        self.Steps = steps
+        local t = SLProf.Begin()
+        local outcome = RunSet(self, params)
+        SLProf.End("Set." .. outcome, t)
+        SLProf.MaybeDump()
     end,
 
     CacheUpdatedGSMessageCommand = function(self, params)
-        EXScore_DBG("Got CacheUpdatedGS " .. tostring(params.Song))
+        if EXSCORE_DEBUG then EXScore_DBG("Got CacheUpdatedGS " .. tostring(params.Song)) end
         -- Optimization: only refresh the song that was updated.
         if params.Song == self.Song then
             self:playcommand("Set", { CacheUpdatedGS = true })
         else
-            EXScore_DBG("CacheUpdatedGS not calling Set due to self.Song not matching")
+            if EXSCORE_DEBUG then EXScore_DBG("CacheUpdatedGS not calling Set due to self.Song not matching") end
         end
     end
 }

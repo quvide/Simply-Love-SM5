@@ -15,19 +15,23 @@ local delay = 0
 local af1 = Def.ActorFrame{
 	InitCommand=function(self)
 		local style = ThemePrefs.Get("VisualStyle")
-		self:visible(ThemePrefs.Get("RainbowMode") and style ~= "SRPG10")
+		local shown = ThemePrefs.Get("RainbowMode") and style ~= "SRPG10"
+		self:visible(shown)
+		-- See Normal.lua: a hidden layer is still updated every frame, and this
+		-- one carries 25 scrolling sprites. Hibernate it until it is shown.
+		if not shown then self:hibernate(math.huge) end
 	end,
 	OnCommand=function(self) self:Center():bob():effectmagnitude(0,50,0):effectperiod(8) end,
 	VisualStyleSelectedMessageCommand=function(self)
 		local style = ThemePrefs.Get("VisualStyle")
 
 		if ThemePrefs.Get("RainbowMode") and style ~= "SRPG10" then
-			self:visible(true):linear(0.6):diffusealpha(1)
+			self:hibernate(0):visible(true):linear(0.6):diffusealpha(1)
 		else
 			self:linear(0.6):diffusealpha(0):queuecommand("Hide")
 		end
 	end,
-	HideCommand=function(self) self:visible(false) end,
+	HideCommand=function(self) self:visible(false):hibernate(math.huge) end,
 }
 
 local af2 = Def.ActorFrame{
